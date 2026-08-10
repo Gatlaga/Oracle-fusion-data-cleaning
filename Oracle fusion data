@@ -1,0 +1,9 @@
+```bash
+cd asset-tool
+git init
+git add .
+git commit -m "Asset cleanup tool"
+git branch -M main
+git remote add origin https://github.com/<gatlaga/asset-cleanup.git
+git push -u origin main
+```
