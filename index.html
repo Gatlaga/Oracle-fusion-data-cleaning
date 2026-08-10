@@ -355,7 +355,23 @@ function stepDot(done){
 }
 
 function renderAdmin(app){
-  // ===== ЯВЦЫН DASHBOARD (дээд талд) =====
+  // ===== ИМПОРТ (дээд талд, хамгийн түрүүн) =====
+  const impRow = document.createElement('div');
+  impRow.style.cssText='display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:4px;';
+
+  const impF = card('📂 Father Asset импортлох', `CSV файл оруулна. Одоогоор: ${state.fatherAssets.length} asset орсон байна.`);
+  const impFInput = document.createElement('input'); impFInput.type='file'; impFInput.accept='.csv';
+  impFInput.onchange = e => handleCsvImport(e, 'father');
+  impF.appendChild(impFInput);
+  impRow.appendChild(impF);
+
+  const impI = card('📂 Item (Spare parts) импортлох', `CSV файл оруулна. Одоогоор: ${state.items.length} item орсон байна.`);
+  const impIInput = document.createElement('input'); impIInput.type='file'; impIInput.accept='.csv';
+  impIInput.onchange = e => handleCsvImport(e, 'item');
+  impI.appendChild(impIInput);
+  impRow.appendChild(impI);
+
+  app.appendChild(impRow);
   const dash = card('📊 Алба нэгж бүрийн явц — Dashboard', '');
 
   // Global progress bars
@@ -430,25 +446,6 @@ function renderAdmin(app){
     <tr><td>${totalItems}</td><td>${unclaimedItemsN}</td><td>${removePending}</td><td>${activeItemsN}</td><td>${removedConfirmed}</td></tr>`;
   itemStat.appendChild(statTable);
   app.appendChild(itemStat);
-
-  // ===== ИМПОРТ =====
-  const impF = card('Father Asset жагсаалт импортлох', 'Oracle-с гаргасан fixed asset (father) list-ийн CSV файлыг оруулна. Багана: код, нэр/тайлбар.');
-  const impFInput = document.createElement('input'); impFInput.type='file'; impFInput.accept='.csv';
-  impFInput.onchange = e => handleCsvImport(e, 'father');
-  impF.appendChild(impFInput);
-  const impFStat = document.createElement('div'); impFStat.className='desc'; impFStat.style.marginTop='10px';
-  impFStat.textContent = `Одоогоор орсон father asset: ${state.fatherAssets.length}`;
-  impF.appendChild(impFStat);
-  app.appendChild(impF);
-
-  const impI = card('Item List импортлох', 'Item list-ийн CSV файлыг оруулна. Багана: код, нэр, категори, min, max, uom.');
-  const impIInput = document.createElement('input'); impIInput.type='file'; impIInput.accept='.csv';
-  impIInput.onchange = e => handleCsvImport(e, 'item');
-  impI.appendChild(impIInput);
-  const impIStat = document.createElement('div'); impIStat.className='desc'; impIStat.style.marginTop='10px';
-  impIStat.textContent = `Одоогоор орсон item: ${state.items.length}`;
-  impI.appendChild(impIStat);
-  app.appendChild(impI);
 
   app.appendChild(exemplarCard());
 
