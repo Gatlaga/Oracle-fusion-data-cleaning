@@ -189,12 +189,12 @@ function renderLogin(){
 
   const c = document.createElement('div'); c.className='card';
   c.innerHTML = `<h2 style="font-size:16px">Нэвтрэх</h2>
-    <div class="desc">Алба нэгжээ сонгоод нууц үгээ оруулна уу.</div>`;
+    <div class="desc">Алба нэгжээ сонгоод нууц үгээ оруулна уу. Админ бол доор "Админ" сонгоно.</div>`;
 
   const roleRow = document.createElement('div'); roleRow.className='row'; roleRow.style.marginBottom='12px';
   let mode = 'manager';
   const mgrBtn = document.createElement('button'); mgrBtn.className='btn'; mgrBtn.textContent='Алба нэгжийн менежер';
-  const admBtn = document.createElement('button'); admBtn.className='btn secondary'; admBtn.textContent='Админ (Гана)';
+  const admBtn = document.createElement('button'); admBtn.className='btn secondary'; admBtn.textContent='Админ';
   function setMode(m){ mode=m; mgrBtn.className = m==='manager'?'btn':'btn secondary'; admBtn.className = m==='admin'?'btn':'btn secondary'; drawForm(); }
   mgrBtn.onclick=()=>setMode('manager'); admBtn.onclick=()=>setMode('admin');
   roleRow.append(mgrBtn, admBtn);
@@ -328,10 +328,123 @@ function exemplarCard(){
 }
 
 // ================= ADMIN TAB =================
+function deptProgressStatus(deptName){
+  const f = state.fatherAssets.filter(a=>a.department===deptName);
+  const cList = state.childAssets.filter(x=>x.department===deptName);
+  const cIds = cList.map(x=>x.id);
+  const myItems = state.items.filter(it=>it.department===deptName);
+  const activeItems = myItems.filter(it=>it.status==='active' || it.status==='removed');
+  const links = state.links.filter(x=>cIds.includes(x.child_asset_id));
+  return {
+    assetClaimed: f.length,
+    childDone: cList.length,
+    itemClaimed: myItems.length,
+    itemReviewed: activeItems.length,
+    linksMade: links.length,
+    // step completion booleans
+    step1: f.length>0,                                   // Asset claim
+    step2: cList.length>0,                                // Child задлах
+    step3: myItems.length>0,                              // Item claim
+    step4: myItems.length>0 && activeItems.length===myItems.length,  // бүх item шалгасан
+    step5: links.length>0,                               // Item-Asset холбосон
+  };
+}
+
+function stepDot(done){
+  return `<span style="display:inline-block;width:16px;height:16px;border-radius:50%;background:${done?'var(--accent2)':'var(--line)'};color:${done?'#000':'var(--sub)'};text-align:center;line-height:16px;font-size:10px;font-weight:700;">${done?'✓':'·'}</span>`;
+}
+
 function renderAdmin(app){
-  const deptCard = card('Алба нэгжүүд', 'Алба нэгж бүрд нэг нууц үг. Менежерүүд энэ нэр+нууц үгээр нэвтэрнэ.');
+  // ===== ЯВЦЫН DASHBOARD (дээд талд) =====
+  const dash = card('Явцын самбар — алба нэгж бүрийн байдал', 'Алба нэгж бүр аль үе шатанд явааг харуулна. ✓ = хийгдсэн.');
+  const totalFather = state.fatherAssets.length;
+  const claimedFather = state.fatherAssets.filter(a=>a.department).length;
+  const unclaimedItemsN = state.items.filter(it=>!it.department).length;
+  const activeItemsN = state.items.filter(it=>it.status==='active').length;
+  dash.appendChild(progressRow('Father asset claim хийгдсэн', claimedFather, totalFather||1));
+  dash.appendChild(progressRow('Item баталгаажсан (Идэвхтэй)', activeItemsN, state.items.length||1));
+
+  const dt = document.createElement('table');
+  dt.innerHTML = `<tr>
+      <th>Алба нэгж</th>
+      <th>1. Asset<br>claim</th>
+      <th>2. Child<br>задлах</th>
+      <th>3. Item<br>claim</th>
+      <th>4. Item<br>шалгасан</th>
+      <th>5. Item↔Asset<br>холбосон</th>
+      <th>Тоон дүн</th>
+    </tr>` +
+    state.departments.map(d=>{
+      const s = deptProgressStatus(d.name);
+      return `<tr>
+        <td><strong>${escapeHtml(d.name)}</strong></td>
+        <td>${stepDot(s.step1)}</td>
+        <td>${stepDot(s.step2)}</td>
+        <td>${stepDot(s.step3)}</td>
+        <td>${stepDot(s.step4)}</td>
+        <td>${stepDot(s.step5)}</td>
+        <td class="link-note">A:${s.assetClaimed} C:${s.childDone} I:${s.itemClaimed}(${s.itemReviewed}✓) L:${s.linksMade}</td>
+      </tr>`;
+    }).join('');
+  dash.appendChild(dt);
+  app.appendChild(dash);
+
+  // Item status overview
+  const itemStat = card('Item-ийн ерөнхий байдал', 'Алба нэгжид хуваарилагдаагүй, баталгаажсан болон хасахаар санал болгосон item-ийн тоо.');
+  const totalItems = state.items.length;
+  const removePending = state.items.filter(it=>it.status==='remove_pending').length;
+  const removedConfirmed = state.items.filter(it=>it.status==='removed').length;
+  const statTable = document.createElement('table');
+  statTable.innerHTML = `<tr><th>Нийт item</th><th>Эзэмшигчгүй</th><th>Хасахаар санал</th><th>Баталгаажсан идэвхтэй</th><th>Устгахаар баталгаажсан</th></tr>
+    <tr><td>${totalItems}</td><td>${unclaimedItemsN}</td><td>${removePending}</td><td>${activeItemsN}</td><td>${removedConfirmed}</td></tr>`;
+  itemStat.appendChild(statTable);
+  app.appendChild(itemStat);
+
+  // ===== ИМПОРТ =====
+  const impF = card('Father Asset жагсаалт импортлох', 'Oracle-с гаргасан fixed asset (father) list-ийн CSV файлыг оруулна. Багана: код, нэр/тайлбар.');
+  const impFInput = document.createElement('input'); impFInput.type='file'; impFInput.accept='.csv';
+  impFInput.onchange = e => handleCsvImport(e, 'father');
+  impF.appendChild(impFInput);
+  const impFStat = document.createElement('div'); impFStat.className='desc'; impFStat.style.marginTop='10px';
+  impFStat.textContent = `Одоогоор орсон father asset: ${state.fatherAssets.length}`;
+  impF.appendChild(impFStat);
+  app.appendChild(impF);
+
+  const impI = card('Item List импортлох', 'Item list-ийн CSV файлыг оруулна. Багана: код, нэр, категори, min, max, uom.');
+  const impIInput = document.createElement('input'); impIInput.type='file'; impIInput.accept='.csv';
+  impIInput.onchange = e => handleCsvImport(e, 'item');
+  impI.appendChild(impIInput);
+  const impIStat = document.createElement('div'); impIStat.className='desc'; impIStat.style.marginTop='10px';
+  impIStat.textContent = `Одоогоор орсон item: ${state.items.length}`;
+  impI.appendChild(impIStat);
+  app.appendChild(impI);
+
+  app.appendChild(exemplarCard());
+
+  const dup = card('Давхардсан item илрүүлэлт', 'Ижил нэртэй боловч өөр код-той item-үүд (цэвэрлэх шаардлагатай).');
+  const groups = {};
+  state.items.forEach(it=>{ const k = norm(it.name); (groups[k] = groups[k]||[]).push(it); });
+  const dupGroups = Object.values(groups).filter(g=>g.length>1);
+  if(dupGroups.length===0){ dup.appendChild(el('div','empty','Давхардал олдсонгүй (эсвэл item list импортлогдоогүй байна)')); }
+  else {
+    const t = document.createElement('table');
+    t.innerHTML = '<tr><th>Нэр</th><th>Кодууд</th><th>Тоо</th></tr>' +
+      dupGroups.slice(0,200).map(g=>`<tr><td>${escapeHtml(g[0].name)}</td><td style="font-family:var(--mono)">${g.map(x=>x.code).join(', ')}</td><td><span class="tag dup">${g.length}</span></td></tr>`).join('');
+    dup.appendChild(t);
+    if(dupGroups.length>200){ dup.appendChild(el('div','desc',`+ дахин ${dupGroups.length-200} бүлэг...`)); }
+  }
+  app.appendChild(dup);
+
+  // ===== АЛБА НЭГЖ УДИРДЛАГА (доод талд, эвхэгддэг) =====
+  const mgmtToggle = document.createElement('button');
+  mgmtToggle.className='btn ghost small'; mgmtToggle.style.marginTop='8px';
+  mgmtToggle.textContent='⚙ Алба нэгж удирдах (нэмэх / нууц үг / устгах)';
+  const mgmtWrap = document.createElement('div'); mgmtWrap.style.display='none';
+  mgmtToggle.onclick = ()=>{ mgmtWrap.style.display = mgmtWrap.style.display==='none'?'block':'none'; };
+
+  const deptCard = card('Алба нэгжүүд', 'Ихэвчлэн шаардлагагүй. Шинэ алба нэгж нэмэх, нууц үг харах, эсвэл устгах үед л ашиглана.');
   const deptRow = document.createElement('div'); deptRow.className='row'; deptRow.style.marginBottom='10px';
-  const deptInput = document.createElement('input'); deptInput.type='text'; deptInput.placeholder='Алба нэгжийн нэр...'; deptInput.style.flex='1';
+  const deptInput = document.createElement('input'); deptInput.type='text'; deptInput.placeholder='Шинэ алба нэгжийн нэр...'; deptInput.style.flex='1';
   const pwdInput = document.createElement('input'); pwdInput.type='text'; pwdInput.placeholder='Нууц үг...'; pwdInput.style.width='160px';
   const deptAddBtn = document.createElement('button'); deptAddBtn.className='btn'; deptAddBtn.textContent='Нэмэх';
   deptAddBtn.onclick = async ()=>{
@@ -356,79 +469,14 @@ function renderAdmin(app){
       <div class="stat">Father asset: ${fCount}</div>
       <div class="stat">Child asset: ${cCount}</div>`;
     const rm = document.createElement('button'); rm.className='btn ghost small'; rm.style.marginTop='8px'; rm.textContent='Устгах';
-    rm.onclick = async ()=>{ await dbDelete('departments', d.id); state.departments = state.departments.filter(x=>x.id!==d.id); render(); };
+    rm.onclick = async ()=>{ if(confirm(`"${d.name}" алба нэгжийг устгах уу?`)){ await dbDelete('departments', d.id); state.departments = state.departments.filter(x=>x.id!==d.id); render(); } };
     el2.appendChild(rm);
     deptGrid.appendChild(el2);
   });
   deptCard.appendChild(deptGrid);
-  app.appendChild(deptCard);
-
-  const impF = card('Father Asset жагсаалт импортлох', 'Oracle-с гаргасан fixed asset (father) list-ийн CSV файлыг оруулна. Багана: код, нэр/тайлбар.');
-  const impFInput = document.createElement('input'); impFInput.type='file'; impFInput.accept='.csv';
-  impFInput.onchange = e => handleCsvImport(e, 'father');
-  impF.appendChild(impFInput);
-  const impFStat = document.createElement('div'); impFStat.className='desc'; impFStat.style.marginTop='10px';
-  impFStat.textContent = `Одоогоор орсон father asset: ${state.fatherAssets.length}`;
-  impF.appendChild(impFStat);
-  app.appendChild(impF);
-
-  const impI = card('Item List импортлох', 'Item list-ийн CSV файлыг оруулна. Багана: код, нэр, категори, min, max, uom.');
-  const impIInput = document.createElement('input'); impIInput.type='file'; impIInput.accept='.csv';
-  impIInput.onchange = e => handleCsvImport(e, 'item');
-  impI.appendChild(impIInput);
-  const impIStat = document.createElement('div'); impIStat.className='desc'; impIStat.style.marginTop='10px';
-  impIStat.textContent = `Одоогоор орсон item: ${state.items.length}`;
-  impI.appendChild(impIStat);
-  app.appendChild(impI);
-
-  const prog = card('Явцын самбар', 'Алба нэгж бүрийн claim болон баталгаажуулалтын явц.');
-  const totalFather = state.fatherAssets.length;
-  const claimedFather = state.fatherAssets.filter(a=>a.department).length;
-  const totalLinks = state.links.length;
-  const verifiedLinks = state.links.filter(l=>l.verified).length;
-  prog.appendChild(progressRow('Father asset claim хийгдсэн', claimedFather, totalFather));
-  prog.appendChild(progressRow('Item холболт баталгаажсан', verifiedLinks, totalLinks || 1));
-  const deptTable = document.createElement('table');
-  deptTable.innerHTML = `<tr><th>Алба нэгж</th><th>Father</th><th>Child</th><th>Холбосон item</th><th>Баталгаажсан</th></tr>` +
-    state.departments.map(d=>{
-      const f = state.fatherAssets.filter(a=>a.department===d.name).length;
-      const cList = state.childAssets.filter(x=>x.department===d.name);
-      const cIds = cList.map(x=>x.id);
-      const l = state.links.filter(x=>cIds.includes(x.child_asset_id));
-      const v = l.filter(x=>x.verified).length;
-      return `<tr><td>${escapeHtml(d.name)}</td><td>${f}</td><td>${cList.length}</td><td>${l.length}</td><td>${v}/${l.length}</td></tr>`;
-    }).join('');
-  prog.appendChild(deptTable);
-  app.appendChild(prog);
-
-  // Item status overview
-  const itemStat = card('Item-ийн ерөнхий байдал', 'Алба нэгжид хуваарилагдаагүй, шалгагдаагүй болон хасахаар санал болгосон item-ийн тоо.');
-  const totalItems = state.items.length;
-  const unclaimedItems = state.items.filter(it=>!it.department).length;
-  const removePending = state.items.filter(it=>it.status==='remove_pending').length;
-  const activeConfirmed = state.items.filter(it=>it.status==='active').length;
-  const removedConfirmed = state.items.filter(it=>it.status==='removed').length;
-  const statTable = document.createElement('table');
-  statTable.innerHTML = `<tr><th>Нийт item</th><th>Эзэмшигчгүй</th><th>Хасахаар санал болгосон</th><th>Баталгаажсан идэвхтэй</th><th>Баталгаажсан устгагдсан</th></tr>
-    <tr><td>${totalItems}</td><td>${unclaimedItems}</td><td>${removePending}</td><td>${activeConfirmed}</td><td>${removedConfirmed}</td></tr>`;
-  itemStat.appendChild(statTable);
-  app.appendChild(itemStat);
-
-  app.appendChild(exemplarCard());
-
-  const dup = card('Давхардсан item илрүүлэлт', 'Ижил нэртэй боловч өөр код-той item-үүд (цэвэрлэх шаардлагатай).');
-  const groups = {};
-  state.items.forEach(it=>{ const k = norm(it.name); (groups[k] = groups[k]||[]).push(it); });
-  const dupGroups = Object.values(groups).filter(g=>g.length>1);
-  if(dupGroups.length===0){ dup.appendChild(el('div','empty','Давхардал олдсонгүй (эсвэл item list импортлогдоогүй байна)')); }
-  else {
-    const t = document.createElement('table');
-    t.innerHTML = '<tr><th>Нэр</th><th>Кодууд</th><th>Тоо</th></tr>' +
-      dupGroups.slice(0,200).map(g=>`<tr><td>${escapeHtml(g[0].name)}</td><td style="font-family:var(--mono)">${g.map(x=>x.code).join(', ')}</td><td><span class="tag dup">${g.length}</span></td></tr>`).join('');
-    dup.appendChild(t);
-    if(dupGroups.length>200){ dup.appendChild(el('div','desc',`+ дахин ${dupGroups.length-200} бүлэг...`)); }
-  }
-  app.appendChild(dup);
+  mgmtWrap.appendChild(deptCard);
+  app.appendChild(mgmtToggle);
+  app.appendChild(mgmtWrap);
 }
 
 function progressRow(label, num, den){
@@ -565,13 +613,35 @@ function ensureDept(app, subtitle){
   return true;
 }
 
+function myProgressBanner(deptName){
+  const s = deptProgressStatus(deptName);
+  const wrap = document.createElement('div');
+  wrap.style.cssText='display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;';
+  const steps = [
+    ['1. Asset claim', s.step1],
+    ['2. Child задлах', s.step2],
+    ['3. Item claim', s.step3],
+    ['4. Item шалгасан', s.step4],
+    ['5. Item↔Asset холбосон', s.step5],
+  ];
+  steps.forEach(([label,done])=>{
+    const chip = document.createElement('span');
+    chip.style.cssText=`font-size:11px;padding:4px 10px;border-radius:12px;border:1px solid ${done?'var(--accent2)':'var(--line)'};color:${done?'var(--accent2)':'var(--sub)'};background:${done?'#1a2e22':'transparent'};`;
+    chip.textContent = (done?'✓ ':'') + label;
+    wrap.appendChild(chip);
+  });
+  return wrap;
+}
+
 // ================= ASSET TAB =================
 function renderAssetTab(app){
   if(!ensureDept(app, 'Asset шалгаж, child asset болгож задлах.')) return;
   const dept = state.currentDept;
 
   if(session.role==='manager'){
-    app.appendChild(card(`Таны алба нэгж: ${dept} — Asset шалгах`, 'Доорх дарааллаар: (1) өөрийн asset-аа claim хий, (2) дутуу бол нэм, (3) child asset болгож задал. Тайлбар "Заавар" табд.'));
+    const b = card(`Таны алба нэгж: ${dept} — Asset шалгах`, 'Доорх дарааллаар: (1) өөрийн asset-аа claim хий, (2) дутуу бол нэм, (3) child asset болгож задал. Тайлбар "Заавар" табд.');
+    b.appendChild(myProgressBanner(dept));
+    app.appendChild(b);
   }
 
   const unclaimed = state.fatherAssets.filter(a=>!a.department);
@@ -634,7 +704,9 @@ function renderItemTab(app){
   const dept = state.currentDept;
 
   if(session.role==='manager'){
-    app.appendChild(card(`Таны алба нэгж: ${dept} — Item (Spare parts) шалгах`, '(1) өөрийн item-ээ claim хий, (2) Category/Min/Max/UOM шалгаж "Идэвхтэй" болго, (3) хэрэггүйг "Хасах"-д тэмдэглэ.'));
+    const b = card(`Таны алба нэгж: ${dept} — Item (Spare parts) шалгах`, '(1) өөрийн item-ээ claim хий, (2) Category/Min/Max/UOM шалгаж "Идэвхтэй" болго, (3) хэрэггүйг "Хасах"-д тэмдэглэ.');
+    b.appendChild(myProgressBanner(dept));
+    app.appendChild(b);
   }
 
   app.appendChild(exemplarCard());
@@ -718,6 +790,43 @@ function renderItemReviewRow(it){
   };
   statusRow.append(statusLbl, statusSel);
   wrap.appendChild(statusRow);
+
+  // Oracle FBDI item fields (collapsible)
+  const oracleToggle = document.createElement('button');
+  oracleToggle.className='btn ghost small'; oracleToggle.style.marginTop='6px';
+  oracleToggle.textContent='⚙ Oracle талбар (Org, Status, UOM...)';
+  const oracleWrap = document.createElement('div');
+  oracleWrap.style.cssText='display:none;margin-top:8px;padding:10px;background:var(--panel);border-radius:6px;';
+  oracleToggle.onclick = ()=>{ oracleWrap.style.display = oracleWrap.style.display==='none'?'block':'none'; };
+  const fields = [
+    ['transaction_type','Transaction Type','select:Create,Sync'],
+    ['org_code','Organization Code','text'],
+    ['item_status','Item Status','select:Active,Inactive'],
+    ['item_type','Item Type','text'],
+    ['primary_uom','Primary UOM Code','text'],
+    ['item_class','Item Class / Template','text'],
+    ['source_system','Source System Code','text'],
+  ];
+  const grid = document.createElement('div'); grid.style.cssText='display:grid;grid-template-columns:1fr 1fr;gap:8px;';
+  fields.forEach(([key,label,type])=>{
+    const fw = document.createElement('div');
+    const lb = document.createElement('label'); lb.textContent=label; lb.style.cssText='font-size:11px;color:var(--sub);display:block;margin-bottom:2px;';
+    let inp;
+    if(type.startsWith('select:')){
+      inp = document.createElement('select');
+      const opts = type.split(':')[1].split(',');
+      inp.innerHTML = '<option value="">--</option>' + opts.map(o=>`<option ${it[key]===o?'selected':''}>${o}</option>`).join('');
+    } else {
+      inp = document.createElement('input'); inp.type='text'; inp.value=it[key]||'';
+    }
+    inp.style.width='100%';
+    inp.onchange = async ()=>{ it[key]=inp.value; await dbUpdate('items', it.id, {[key]: inp.value}); };
+    fw.append(lb, inp);
+    grid.appendChild(fw);
+  });
+  oracleWrap.appendChild(grid);
+  wrap.appendChild(oracleToggle);
+  wrap.appendChild(oracleWrap);
   return wrap;
 }
 
@@ -766,7 +875,46 @@ function renderChildAsset(c){
   head.appendChild(rm);
   wrap.appendChild(head);
 
-  const links = state.links.filter(l=>l.child_asset_id===c.id);
+  // Oracle FBDI fields (collapsible)
+  const oracleToggle = document.createElement('button');
+  oracleToggle.className='btn ghost small'; oracleToggle.style.marginTop='6px';
+  oracleToggle.textContent='⚙ Oracle талбар (өртөг, элэгдэл, огноо...)';
+  const oracleWrap = document.createElement('div');
+  oracleWrap.style.cssText='display:none;margin-top:8px;padding:10px;background:var(--panel2);border-radius:6px;';
+  oracleToggle.onclick = ()=>{ oracleWrap.style.display = oracleWrap.style.display==='none'?'block':'none'; };
+  const oracleFields = [
+    ['category','Asset Category (Oracle)','text'],
+    ['date_in_service','Ашиглалтад орсон огноо (DD/MM/YYYY)','text'],
+    ['asset_cost','Өртөг (Asset Cost)','text'],
+    ['asset_type','Asset Type','select:Capitalized,CIP,Expensed'],
+    ['deprn_method','Элэгдлийн арга','select:STL,Flat-Rate,Units of Production'],
+    ['life_months','Ашиглалтын хугацаа (сар)','text'],
+    ['location','Байршил (Location)','text'],
+    ['criticality','Чухал түвшин','select:Өндөр,Дунд,Бага'],
+    ['manufacturer','Manufacturer','text'],
+    ['model','Model','text'],
+    ['serial','Serial Number','text'],
+  ];
+  const grid = document.createElement('div'); grid.style.cssText='display:grid;grid-template-columns:1fr 1fr;gap:8px;';
+  oracleFields.forEach(([key,label,type])=>{
+    const fw = document.createElement('div');
+    const lb = document.createElement('label'); lb.textContent=label; lb.style.cssText='font-size:11px;color:var(--sub);display:block;margin-bottom:2px;';
+    let inp;
+    if(type.startsWith('select:')){
+      inp = document.createElement('select');
+      const opts = type.split(':')[1].split(',');
+      inp.innerHTML = '<option value="">--</option>' + opts.map(o=>`<option ${c[key]===o?'selected':''}>${o}</option>`).join('');
+    } else {
+      inp = document.createElement('input'); inp.type='text'; inp.value=c[key]||'';
+    }
+    inp.style.width='100%';
+    inp.onchange = async ()=>{ c[key]=inp.value; await dbUpdate('child_assets', c.id, {[key]: inp.value}); };
+    fw.append(lb, inp);
+    grid.appendChild(fw);
+  });
+  oracleWrap.appendChild(grid);
+  wrap.appendChild(oracleToggle);
+  wrap.appendChild(oracleWrap);
   links.forEach(l=>wrap.appendChild(renderItemLink(l)));
 
   const searchWrap = document.createElement('div'); searchWrap.className='search-box'; searchWrap.style.marginTop='6px';
@@ -1054,6 +1202,33 @@ function renderExport(app){
   };
   c2b.appendChild(b2b);
   app.appendChild(c2b);
+
+  // ---- Oracle FBDI ready exports ----
+  const cFA = card('⬇ Oracle FBDI — Asset (FA_MASS_ADDITIONS)', 'Child asset тус бүрийг Oracle FA Mass Additions баганаар. Гана эцэст нь санхүүгийн дутуу утгыг нөхөж, Oracle FBDI .xlsm-д хуулна.');
+  const bFA = document.createElement('button'); bFA.className='btn'; bFA.textContent='Oracle Asset CSV татах';
+  bFA.onclick = ()=>{
+    const rows = [['ASSET_NUMBER','DESCRIPTION','ASSET_CATEGORY','DATE_PLACED_IN_SERVICE','ASSET_COST','ASSET_TYPE','DEPRN_METHOD','LIFE_IN_MONTHS','LOCATION','UNITS','CRITICALITY','MANUFACTURER','MODEL','SERIAL_NUMBER','DEPARTMENT','PARENT_ASSET']];
+    state.childAssets.forEach(c=>{
+      const fa = state.fatherAssets.find(x=>x.id===c.father_id);
+      rows.push(['', c.name, c.category||'', c.date_in_service||'', c.asset_cost||'', c.asset_type||'', c.deprn_method||'', c.life_months||'', c.location||'', c.qty||'1', c.criticality||'', c.manufacturer||'', c.model||'', c.serial||'', c.department||'', fa?fa.name:'']);
+    });
+    downloadCsv(rows, 'oracle-fa-mass-additions.csv');
+  };
+  cFA.appendChild(bFA);
+  app.appendChild(cFA);
+
+  const cIT = card('⬇ Oracle FBDI — Item (EGP_SYSTEM_ITEMS)', 'Зөвхөн "Идэвхтэй" item-ийг Oracle Item Import баганаар. Устгах/Хасах санал орохгүй.');
+  const bIT = document.createElement('button'); bIT.className='btn'; bIT.textContent='Oracle Item CSV татах';
+  bIT.onclick = ()=>{
+    const rows = [['TRANSACTION_TYPE','ORGANIZATION_CODE','ITEM_NUMBER','DESCRIPTION','ITEM_STATUS','ITEM_TYPE','PRIMARY_UOM_CODE','ITEM_CLASS','SOURCE_SYSTEM_CODE','CATEGORY','MIN_QTY','MAX_QTY','DEPARTMENT']];
+    state.items.forEach(it=>{
+      if(it.status!=='active') return;
+      rows.push([it.transaction_type||'Create', it.org_code||'MMC', it.code, it.name, it.item_status||'Active', it.item_type||'', it.primary_uom||it.uom||'', it.item_class||'', it.source_system||'Legacy', it.category||'', it.min||'', it.max||'', it.department||'']);
+    });
+    downloadCsv(rows, 'oracle-item-import.csv');
+  };
+  cIT.appendChild(bIT);
+  app.appendChild(cIT);
 
   const c3 = card('Давхардсан item тайлан', 'Ижил нэртэй боловч өөр код-той item-ийн бүлгүүд.');
   const b3 = document.createElement('button'); b3.className='btn secondary'; b3.textContent='CSV татах';
