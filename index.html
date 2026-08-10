@@ -251,7 +251,7 @@ function renderNav(){
   if(session.role==='admin'){
     tabs = [['admin','Ерөнхий/Тохиргоо'],['asset','Asset шалгах'],['item','Item шалгах'],['matrix','Item↔Asset холбох'],['export','Экспорт'],['guide','Заавар']];
   } else {
-    tabs = [['asset','Asset шалгах'],['item','Item (Spare parts) шалгах'],['matrix','Item↔Asset холбох'],['guide','Заавар']];
+    tabs = [['asset','Asset шалгах'],['item','Item (Spare parts) шалгах'],['matrix','Item↔Asset холбох'],['export','Экспорт'],['guide','Заавар']];
   }
   tabs.forEach(([key,label])=>{
     const b = document.createElement('button');
@@ -289,8 +289,8 @@ function render(){
   updateConnBadge();
   const app = document.getElementById('app');
   app.innerHTML = '';
-  // managers can't access admin/export tabs
-  if(session.role==='manager' && (state.currentTab==='admin'||state.currentTab==='export')){
+  // managers can't access admin tabs
+  if(session.role==='manager' && state.currentTab==='admin'){
     state.currentTab = 'asset';
   }
   // migrate old 'work' tab to new 'asset'
@@ -356,37 +356,68 @@ function stepDot(done){
 
 function renderAdmin(app){
   // ===== ЯВЦЫН DASHBOARD (дээд талд) =====
-  const dash = card('Явцын самбар — алба нэгж бүрийн байдал', 'Алба нэгж бүр аль үе шатанд явааг харуулна. ✓ = хийгдсэн.');
+  const dash = card('📊 Алба нэгж бүрийн явц — Dashboard', '');
+
+  // Global progress bars
   const totalFather = state.fatherAssets.length;
   const claimedFather = state.fatherAssets.filter(a=>a.department).length;
-  const unclaimedItemsN = state.items.filter(it=>!it.department).length;
   const activeItemsN = state.items.filter(it=>it.status==='active').length;
-  dash.appendChild(progressRow('Father asset claim хийгдсэн', claimedFather, totalFather||1));
-  dash.appendChild(progressRow('Item баталгаажсан (Идэвхтэй)', activeItemsN, state.items.length||1));
+  dash.appendChild(progressRow(`Father asset хуваарилагдсан (${claimedFather}/${totalFather})`, claimedFather, totalFather||1));
+  dash.appendChild(progressRow(`Item баталгаажсан (${activeItemsN}/${state.items.length})`, activeItemsN, state.items.length||1));
 
-  const dt = document.createElement('table');
-  dt.innerHTML = `<tr>
-      <th>Алба нэгж</th>
-      <th>1. Asset<br>claim</th>
-      <th>2. Child<br>задлах</th>
-      <th>3. Item<br>claim</th>
-      <th>4. Item<br>шалгасан</th>
-      <th>5. Item↔Asset<br>холбосон</th>
-      <th>Тоон дүн</th>
-    </tr>` +
-    state.departments.map(d=>{
-      const s = deptProgressStatus(d.name);
-      return `<tr>
-        <td><strong>${escapeHtml(d.name)}</strong></td>
-        <td>${stepDot(s.step1)}</td>
-        <td>${stepDot(s.step2)}</td>
-        <td>${stepDot(s.step3)}</td>
-        <td>${stepDot(s.step4)}</td>
-        <td>${stepDot(s.step5)}</td>
-        <td class="link-note">A:${s.assetClaimed} C:${s.childDone} I:${s.itemClaimed}(${s.itemReviewed}✓) L:${s.linksMade}</td>
-      </tr>`;
-    }).join('');
-  dash.appendChild(dt);
+  // Per-department big cards
+  const dGrid = document.createElement('div');
+  dGrid.style.cssText='display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;margin-top:16px;';
+
+  state.departments.forEach(d=>{
+    const s = deptProgressStatus(d.name);
+    const myItems = state.items.filter(it=>it.department===d.name);
+    const activeI = myItems.filter(it=>it.status==='active').length;
+    const removeI = myItems.filter(it=>it.status==='removed'||it.status==='remove_pending').length;
+
+    // completion percent
+    const steps = [s.step1,s.step2,s.step3,s.step4,s.step5];
+    const donePct = Math.round(steps.filter(Boolean).length/5*100);
+    const barColor = donePct===100?'var(--accent2)':donePct>=60?'#f0a500':'var(--accent)';
+
+    const dc = document.createElement('div');
+    dc.style.cssText='background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;';
+    dc.innerHTML=`
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <strong style="font-size:15px">${escapeHtml(d.name)}</strong>
+        <span style="font-size:13px;font-weight:700;color:${barColor}">${donePct}%</span>
+      </div>
+      <div style="background:var(--panel2);border-radius:4px;height:6px;margin-bottom:12px">
+        <div style="background:${barColor};width:${donePct}%;height:6px;border-radius:4px;transition:width .3s"></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:10px">
+        <div style="text-align:center;background:var(--panel2);padding:8px;border-radius:6px">
+          <div style="font-size:20px;font-weight:700;color:var(--accent)">${s.assetClaimed}</div>
+          <div style="font-size:10px;color:var(--sub)">Father Asset</div>
+        </div>
+        <div style="text-align:center;background:var(--panel2);padding:8px;border-radius:6px">
+          <div style="font-size:20px;font-weight:700;color:var(--accent2)">${s.childDone}</div>
+          <div style="font-size:10px;color:var(--sub)">Child Asset</div>
+        </div>
+        <div style="text-align:center;background:var(--panel2);padding:8px;border-radius:6px">
+          <div style="font-size:20px;font-weight:700;color:#f0a500">${s.itemClaimed}</div>
+          <div style="font-size:10px;color:var(--sub)">Item</div>
+        </div>
+      </div>
+      <div style="font-size:11px;color:var(--sub);display:flex;gap:8px;flex-wrap:wrap">
+        ${s.step1?'<span style="color:var(--accent2)">✓ Asset</span>':'<span>· Asset</span>'}
+        ${s.step2?'<span style="color:var(--accent2)">✓ Child</span>':'<span>· Child</span>'}
+        ${s.step3?'<span style="color:var(--accent2)">✓ Item claim</span>':'<span>· Item claim</span>'}
+        ${s.step4?'<span style="color:var(--accent2)">✓ Item шалгасан</span>':'<span>· Item шалгасан</span>'}
+        ${s.step5?'<span style="color:var(--accent2)">✓ Холбосон</span>':'<span>· Холбосон</span>'}
+      </div>
+      ${activeI>0||removeI>0?`<div style="font-size:11px;margin-top:8px;padding-top:8px;border-top:1px solid var(--line)">
+        <span style="color:var(--accent2)">✓ ${activeI} идэвхтэй</span>
+        ${removeI>0?`<span style="color:var(--danger);margin-left:8px">✕ ${removeI} хасах</span>`:''}
+      </div>`:''}`;
+    dGrid.appendChild(dc);
+  });
+  dash.appendChild(dGrid);
   app.appendChild(dash);
 
   // Item status overview
@@ -499,19 +530,43 @@ async function handleCsvImport(e, kind){
 function openColumnMapModal(kind, cols, rows){
   const root = document.getElementById('modalRoot');
   const fields = kind==='father'
-    ? [['code','Код'],['name','Нэр/Тайлбар']]
-    : [['code','Код'],['name','Нэр'],['category','Категори'],['min','Min'],['max','Max'],['uom','UOM'],['department','Алба нэгж (лавлагаа, заавал биш)'],['note','Тайлбар (заавал биш)']];
+    ? [
+        ['code','Код (Asset Number)'],
+        ['name','Нэр (Asset Description)'],
+        ['assetGroup','Asset Group (заавал биш)'],
+        ['assetCategory','Asset Category (заавал биш)'],
+        ['processArea','Process Area (заавал биш)'],
+        ['department','Санал болгож буй алба нэгж → автоматаар хуваарилна'],
+      ]
+    : [
+        ['code','Код'],['name','Нэр'],['category','Категори'],
+        ['min','Min'],['max','Max'],['uom','UOM'],
+        ['department','Алба нэгж (лавлагаа, заавал биш)'],
+        ['note','Тайлбар (заавал биш)'],
+      ];
   const bg = document.createElement('div'); bg.className='modal-bg';
   const modal = document.createElement('div'); modal.className='modal';
   modal.innerHTML = `<h3>${kind==='father'?'Father Asset':'Item'} багана харгалзуулах</h3>
     <div class="desc">CSV-ийн ямар багана юу болохыг сонгоно уу. (${rows.length} мөр)</div>`;
   const selects = {};
+  // Auto-guess mapping
+  const guessMap = {
+    code: ['asset number','number','код','code'],
+    name: ['asset description','description','нэр','name','тайлбар'],
+    assetGroup: ['asset group','group'],
+    assetCategory: ['asset category','category','ангилал'],
+    processArea: ['process area','process','байршил'],
+    department: ['санал болгож','алба нэгж','department','хариуцах'],
+    min: ['min'], max: ['max'], uom: ['uom'],
+    note: ['тайлбар','note','comment'],
+  };
   fields.forEach(([key,label])=>{
     const colDiv = document.createElement('div'); colDiv.className='col';
     colDiv.innerHTML = `<label>${label}</label>`;
     const sel = document.createElement('select');
     sel.innerHTML = '<option value="">-- сонгох --</option>' + cols.map(c=>`<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
-    const guess = cols.find(c=>norm(c).includes(key) || (key==='name' && norm(c).includes('desc')) || (key==='name' && norm(c).includes('нэр')) || (key==='code' && norm(c).includes('код')));
+    const keywords = guessMap[key]||[key];
+    const guess = cols.find(c=>keywords.some(k=>norm(c).includes(k)));
     if(guess) sel.value = guess;
     colDiv.appendChild(sel);
     modal.appendChild(colDiv);
@@ -544,21 +599,35 @@ async function runImport(kind, mapping, rows){
   const BATCH = 500;
   if(kind==='father'){
     const existingCodes = new Set(state.fatherAssets.map(a=>a.code));
+    // valid dept names for auto-assign
+    const validDepts = new Set(state.departments.map(d=>norm(d.name)));
     const toInsert = [];
     rows.forEach(r=>{
       const code = (r[mapping.code]||'').toString().trim();
       const name = (r[mapping.name]||'').toString().trim();
       if(!code || existingCodes.has(code)) return;
-      toInsert.push({ id: uid(), code, name, department: null, source: 'import' });
+      // Auto-assign department from CSV
+      const suggestedRaw = mapping.department ? (r[mapping.department]||'').toString().trim() : '';
+      const matchedDept = state.departments.find(d=>norm(d.name)===norm(suggestedRaw));
+      const dept = matchedDept ? matchedDept.name : null;
+      toInsert.push({
+        id: uid(), code, name,
+        department: dept,
+        source: 'import',
+        // store extra fields in name for now
+      });
       existingCodes.add(code);
     });
+    let imported=0;
     for(let i=0;i<toInsert.length;i+=BATCH){
       const chunk = toInsert.slice(i,i+BATCH);
       const { error } = await sb.from('father_assets').insert(chunk);
       if(error){ toast('Импортын алдаа: '+error.message); break; }
       state.fatherAssets.push(...chunk);
+      imported+=chunk.length;
     }
-    toast(`${toInsert.length} father asset импортлогдлоо`);
+    const assigned = toInsert.filter(x=>x.department).length;
+    toast(`${imported} father asset импортлогдлоо (${assigned} нь алба нэгжид хуваарилагдсан)`);
   } else {
     const existingCodes = new Set(state.items.map(i=>i.code));
     const toInsert = [];
@@ -1198,19 +1267,94 @@ function renderGuide(app){
 
 // ================= EXPORT TAB =================
 function renderExport(app){
-  const c1 = card('Asset жагсаалт экспорт', 'Father + Child asset-ын бүрэн бүтэц.');
-  const b1 = document.createElement('button'); b1.className='btn'; b1.textContent='CSV татах';
-  b1.onclick = ()=>{
-    const rows = [['Father Code','Father Name','Department','Child Asset','Child Qty']];
-    state.fatherAssets.forEach(fa=>{
-      const children = state.childAssets.filter(c=>c.father_id===fa.id);
-      if(children.length===0){ rows.push([fa.code, fa.name, fa.department||'', '', '']); }
-      children.forEach(c=> rows.push([fa.code, fa.name, fa.department||'', c.name, c.qty||'']));
-    });
-    downloadCsv(rows, 'asset-structure.csv');
-  };
-  c1.appendChild(b1);
-  app.appendChild(c1);
+  const dept = session.role==='manager' ? session.deptName : (state.currentDept||null);
+
+  // ---- Manager: өөрийн алба нэгжийн export ----
+  if(session.role==='manager' || dept){
+    const targetDept = dept;
+    const myFather = state.fatherAssets.filter(a=>a.department===targetDept);
+    const myChildren = state.childAssets.filter(c=>c.department===targetDept);
+    const myChildIds = myChildren.map(c=>c.id);
+    const myItems = state.items.filter(it=>it.department===targetDept);
+    const myLinks = state.links.filter(l=>myChildIds.includes(l.child_asset_id));
+
+    const myExp = card(`📥 ${targetDept||''} — Миний дата татах`, 'Өөрийн алба нэгжийн Asset, Child asset, Item жагсаалтыг татна.');
+
+    // Asset export
+    const b1 = document.createElement('button'); b1.className='btn'; b1.style.marginRight='8px';
+    b1.textContent=`Father Asset (${myFather.length}) татах`;
+    b1.onclick=()=>{
+      const rows=[['Asset Number','Asset Description','Department']];
+      myFather.forEach(a=>rows.push([a.code,a.name,a.department||'']));
+      downloadCsv(rows,`${targetDept||'my'}-father-assets.csv`);
+    };
+
+    // Child asset export
+    const b2 = document.createElement('button'); b2.className='btn'; b2.style.marginRight='8px';
+    b2.textContent=`Child Asset (${myChildren.length}) татах`;
+    b2.onclick=()=>{
+      const rows=[['Father Asset Code','Father Asset Name','Child Asset','Тоо ш','Criticality','Category','Date In Service','Asset Cost','Asset Type','Deprn Method','Life Months','Location','Manufacturer','Model','Serial']];
+      myChildren.forEach(c=>{
+        const fa=state.fatherAssets.find(x=>x.id===c.father_id);
+        rows.push([fa?fa.code:'',fa?fa.name:'',c.name,c.qty||'',c.criticality||'',c.category||'',c.date_in_service||'',c.asset_cost||'',c.asset_type||'',c.deprn_method||'',c.life_months||'',c.location||'',c.manufacturer||'',c.model||'',c.serial||'']);
+      });
+      downloadCsv(rows,`${targetDept||'my'}-child-assets.csv`);
+    };
+
+    // Item export
+    const b3 = document.createElement('button'); b3.className='btn secondary'; b3.style.marginRight='8px';
+    b3.textContent=`Item/Spare parts (${myItems.length}) татах`;
+    b3.onclick=()=>{
+      const statusLabel={active:'Идэвхтэй',removed:'Устгасан',remove_pending:'Хасах санал',needs_review:'Шалгагдаагүй'};
+      const rows=[['Item Code','Item Name','Category','Min','Max','UOM','Status','Note']];
+      myItems.forEach(it=>rows.push([it.code,it.name,it.category||'',it.min||'',it.max||'',it.uom||'',statusLabel[it.status]||it.status,it.note||'']));
+      downloadCsv(rows,`${targetDept||'my'}-items.csv`);
+    };
+
+    // Item-Asset link export
+    const b4 = document.createElement('button'); b4.className='btn secondary';
+    b4.textContent=`Item↔Asset холболт (${myLinks.length}) татах`;
+    b4.onclick=()=>{
+      const rows=[['Child Asset','Father Asset','Item Code','Item Name','Category','Min','Max','UOM','Тоо ш','Баталгаажсан']];
+      myLinks.forEach(l=>{
+        const c=state.childAssets.find(x=>x.id===l.child_asset_id);
+        const fa=c?state.fatherAssets.find(x=>x.id===c.father_id):null;
+        const it=state.items.find(x=>x.id===l.item_id);
+        if(!c||!it) return;
+        rows.push([c.name,fa?fa.name:'',it.code,it.name,l.corr_category||it.category||'',l.corr_min||it.min||'',l.corr_max||it.max||'',l.corr_uom||it.uom||'',l.qty||'',l.verified?'Тийм':'Үгүй']);
+      });
+      downloadCsv(rows,`${targetDept||'my'}-item-links.csv`);
+    };
+
+    const btnRow = document.createElement('div'); btnRow.style.display='flex'; btnRow.style.flexWrap='wrap'; btnRow.style.gap='8px';
+    btnRow.append(b1,b2,b3,b4);
+    myExp.appendChild(btnRow);
+    app.appendChild(myExp);
+  }
+
+  // Admin-д нэмэлт export боломж
+  if(session.role==='admin'){
+    // Dept picker for admin
+    if(!dept){
+      const sel = card('Алба нэгжийн export-д алба нэгж сонгоно уу','');
+      const s=document.createElement('select'); s.style.minWidth='200px';
+      s.innerHTML='<option value="">-- сонгох --</option>'+state.departments.map(d=>`<option value="${escapeHtml(d.name)}">${escapeHtml(d.name)}</option>`).join('');
+      s.onchange=()=>{state.currentDept=s.value||null; render();};
+      sel.appendChild(s); app.appendChild(sel);
+    }
+    // Global exports (admin only)
+    const c1 = card('Бүх Asset жагсаалт (нийт)', 'Father + Child asset бүгд.');
+    const b1g = document.createElement('button'); b1g.className='btn'; b1g.textContent='CSV татах';
+    b1g.onclick = ()=>{
+      const rows = [['Father Code','Father Name','Department','Child Asset','Child Qty']];
+      state.fatherAssets.forEach(fa=>{
+        const children = state.childAssets.filter(c=>c.father_id===fa.id);
+        if(children.length===0){ rows.push([fa.code, fa.name, fa.department||'', '', '']); }
+        children.forEach(c=> rows.push([fa.code, fa.name, fa.department||'', c.name, c.qty||'']));
+      });
+      downloadCsv(rows, 'all-asset-structure.csv');
+    };
+    c1.appendChild(b1g); app.appendChild(c1);
 
   const c2 = card('Item холболт экспорт', 'Child asset тус бүрт хамаарах item, тоо ширхэг, баталгаажсан категори/min/max/UOM. Зөвхөн "Идэвхтэй" төлөвтэй item орно (Устгах/Хасах санал орохгүй).');
   const b2 = document.createElement('button'); b2.className='btn'; b2.textContent='CSV татах';
@@ -1282,6 +1426,7 @@ function renderExport(app){
   };
   c3.appendChild(b3);
   app.appendChild(c3);
+  } // end admin section
 }
 
 function downloadCsv(rows, filename){
