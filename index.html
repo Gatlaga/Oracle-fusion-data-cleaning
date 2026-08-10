@@ -84,8 +84,14 @@
    SUPABASE ТОХИРГОО
    Доорх хоёр утгыг Supabase Dashboard -> Project Settings -> API-с аваад бичнэ.
    ========================================================= */
-const SUPABASE_URL = "https://ggqeonhfawwsrzfavjpb.supabase.co"; // жишээ: https://abcdefgh.supabase.co
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdxZW9uaHdmYXd3c3J6ZmF2anBiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYyOTYxNTcsImV4cCI6MjEwMTg3MjE1N30.DwgPU3v3u7fUkJux0u_468qiVL7lLDYTx2ZHJxWDS84";
+/* =========================================================
+   SUPABASE ТОХИРГОО
+   Доорх хоёр утгыг Supabase Dashboard -> Project Settings -> API-с аваад бичнэ.
+   SUPABASE_URL аль хэдийн Project ID-гаар бичигдсэн.
+   SUPABASE_ANON_KEY-г "anon public" key-ээрээ солино уу (Settings -> API Keys).
+   ========================================================= */
+const SUPABASE_URL = "https://ggqeonhfawwsrzfavjpb.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdxZW9uaHdmYXd3c3J6ZmF2anBiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYyOTYxNTcsImV4cCI6MjEwMTg3MjE1N30.DwgPU3v3u7fUkJux0u_468qiVL7lLDYTx2ZHJxWDS84"; // <-- ЭНД anon public key-ээ буулгана
 
 let sb = null;
 let connOk = false;
@@ -97,6 +103,10 @@ try{
 
 const uid = () => Math.random().toString(36).slice(2,10);
 const norm = s => (s||'').toString().trim().toLowerCase().replace(/\s+/g,' ');
+
+const ADMIN_PASSWORD = "admin2026"; // Гана та энэ нууц үгээр Ерөнхий/Тохиргоо, бүх датаг удирдана
+
+let session = { role: null, deptName: null }; // role: 'admin' | 'manager'
 
 let state = {
   departments: [],   // {id, name}
@@ -127,7 +137,7 @@ async function loadAll(){
       sb.from('links').select('*'),
     ]);
     for(const r of [d,f,c,i,l]){ if(r.error) throw r.error; }
-    state.departments = d.data || [];
+    state.departments = (d.data || []).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
     state.fatherAssets = f.data || [];
     state.childAssets = c.data || [];
     state.items = i.data || [];
@@ -165,11 +175,82 @@ async function dbDeleteMatch(table, col, val){
   if(error){ toast('Алдаа: '+error.message); throw error; }
 }
 
+// ---------- LOGIN ----------
+function renderLogin(){
+  const app = document.getElementById('app');
+  app.innerHTML = '';
+  document.getElementById('navBar').innerHTML = '';
+  updateConnBadge();
+
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'max-width:440px;margin:50px auto;';
+
+  const c = document.createElement('div'); c.className='card';
+  c.innerHTML = `<h2 style="font-size:16px">Нэвтрэх</h2>
+    <div class="desc">Алба нэгжээ сонгоод нууц үгээ оруулна уу. Гана (админ) бол доор "Админ" сонгоно.</div>`;
+
+  const roleRow = document.createElement('div'); roleRow.className='row'; roleRow.style.marginBottom='12px';
+  let mode = 'manager';
+  const mgrBtn = document.createElement('button'); mgrBtn.className='btn'; mgrBtn.textContent='Алба нэгжийн менежер';
+  const admBtn = document.createElement('button'); admBtn.className='btn secondary'; admBtn.textContent='Админ (Гана)';
+  function setMode(m){ mode=m; mgrBtn.className = m==='manager'?'btn':'btn secondary'; admBtn.className = m==='admin'?'btn':'btn secondary'; drawForm(); }
+  mgrBtn.onclick=()=>setMode('manager'); admBtn.onclick=()=>setMode('admin');
+  roleRow.append(mgrBtn, admBtn);
+  c.appendChild(roleRow);
+
+  const formWrap = document.createElement('div');
+  c.appendChild(formWrap);
+
+  function drawForm(){
+    formWrap.innerHTML='';
+    if(mode==='manager'){
+      const deptSel = document.createElement('select'); deptSel.style.cssText='width:100%;margin-bottom:10px;';
+      deptSel.innerHTML = '<option value="">-- Алба нэгжээ сонго --</option>' +
+        state.departments.map(d=>`<option value="${escapeHtml(d.name)}">${escapeHtml(d.name)}</option>`).join('');
+      const pwd = document.createElement('input'); pwd.type='password'; pwd.placeholder='Нууц үг'; pwd.style.cssText='width:100%;margin-bottom:10px;';
+      const btn = document.createElement('button'); btn.className='btn'; btn.textContent='Нэвтрэх'; btn.style.width='100%';
+      const err = document.createElement('div'); err.className='desc'; err.style.color='var(--danger)';
+      btn.onclick = ()=>{
+        const dname = deptSel.value;
+        if(!dname){ err.textContent='Алба нэгжээ сонгоно уу'; return; }
+        const dept = state.departments.find(d=>d.name===dname);
+        if(!dept || (dept.password||'') !== pwd.value){ err.textContent='Нууц үг буруу байна'; return; }
+        session = { role:'manager', deptName:dname };
+        state.currentDept = dname;
+        state.currentTab = 'work';
+        render();
+      };
+      pwd.onkeydown = e=>{ if(e.key==='Enter') btn.click(); };
+      formWrap.append(deptSel, pwd, btn, err);
+    } else {
+      const pwd = document.createElement('input'); pwd.type='password'; pwd.placeholder='Админ нууц үг'; pwd.style.cssText='width:100%;margin-bottom:10px;';
+      const btn = document.createElement('button'); btn.className='btn'; btn.textContent='Нэвтрэх'; btn.style.width='100%';
+      const err = document.createElement('div'); err.className='desc'; err.style.color='var(--danger)';
+      btn.onclick = ()=>{
+        if(pwd.value !== ADMIN_PASSWORD){ err.textContent='Нууц үг буруу байна'; return; }
+        session = { role:'admin', deptName:null };
+        state.currentTab = 'admin';
+        render();
+      };
+      pwd.onkeydown = e=>{ if(e.key==='Enter') btn.click(); };
+      formWrap.append(pwd, btn, err);
+    }
+  }
+  drawForm();
+  wrap.appendChild(c);
+  app.appendChild(wrap);
+}
+
 // ---------- NAV ----------
 function renderNav(){
   const nav = document.getElementById('navBar');
   nav.innerHTML = '';
-  const tabs = [['admin','Ерөнхий/Тохиргоо'],['work','Алба нэгжийн ажил'],['matrix','Matrix горим'],['export','Экспорт']];
+  let tabs;
+  if(session.role==='admin'){
+    tabs = [['admin','Ерөнхий/Тохиргоо'],['work','Алба нэгжийн ажил'],['matrix','Matrix горим'],['export','Экспорт'],['guide','Заавар']];
+  } else {
+    tabs = [['work','Миний ажил'],['matrix','Matrix горим'],['guide','Заавар']];
+  }
   tabs.forEach(([key,label])=>{
     const b = document.createElement('button');
     b.textContent = label;
@@ -177,6 +258,12 @@ function renderNav(){
     b.onclick = ()=>{ state.currentTab=key; render(); };
     nav.appendChild(b);
   });
+  // logout button
+  const lo = document.createElement('button');
+  lo.textContent = (session.role==='admin'?'Админ':session.deptName) + ' ⏻';
+  lo.style.marginLeft = '8px';
+  lo.onclick = ()=>{ session={role:null,deptName:null}; state.currentDept=null; render(); };
+  nav.appendChild(lo);
 }
 
 function renderSetupScreen(){
@@ -186,21 +273,27 @@ function renderSetupScreen(){
   document.getElementById('navBar').innerHTML = '';
   const wrap = document.createElement('div'); wrap.className='setup-screen';
   wrap.innerHTML = `<h2>Supabase холболт тохируулаагүй байна</h2>
-    <p class="desc">index.html файлын эхэнд байгаа <b>SUPABASE_URL</b> болон <b>SUPABASE_ANON_KEY</b> утгыг
-    Supabase Dashboard -> Project Settings -> API хэсгээс аваад бичээд дахин deploy хийнэ үү.</p>`;
+    <p class="desc">index.html файлын эхэнд байгаа <b>SUPABASE_ANON_KEY</b> утгыг
+    Supabase Dashboard -> Settings -> API Keys хэсгийн <b>"anon public"</b> key-ээр солиод дахин deploy хийнэ үү. (SUPABASE_URL аль хэдийн бичигдсэн.)</p>`;
   app.appendChild(wrap);
 }
 
 // ---------- RENDER ROOT ----------
 function render(){
   if(!sb){ renderSetupScreen(); return; }
+  if(!session.role){ renderLogin(); return; }
   renderNav();
   updateConnBadge();
   const app = document.getElementById('app');
   app.innerHTML = '';
+  // managers can't access admin/export tabs
+  if(session.role==='manager' && (state.currentTab==='admin'||state.currentTab==='export')){
+    state.currentTab = 'work';
+  }
   if(state.currentTab==='admin') renderAdmin(app);
   else if(state.currentTab==='work') renderWork(app);
   else if(state.currentTab==='matrix') renderMatrix(app);
+  else if(state.currentTab==='guide') renderGuide(app);
   else renderExport(app);
 }
 
@@ -230,20 +323,21 @@ function exemplarCard(){
 
 // ================= ADMIN TAB =================
 function renderAdmin(app){
-  const deptCard = card('Алба нэгжүүд', 'Уулзах 16 алба нэгжийн нэрсийг энд оруулна.');
+  const deptCard = card('Алба нэгжүүд', 'Алба нэгж бүрд нэг нууц үг. Менежерүүд энэ нэр+нууц үгээр нэвтэрнэ.');
   const deptRow = document.createElement('div'); deptRow.className='row'; deptRow.style.marginBottom='10px';
   const deptInput = document.createElement('input'); deptInput.type='text'; deptInput.placeholder='Алба нэгжийн нэр...'; deptInput.style.flex='1';
+  const pwdInput = document.createElement('input'); pwdInput.type='text'; pwdInput.placeholder='Нууц үг...'; pwdInput.style.width='160px';
   const deptAddBtn = document.createElement('button'); deptAddBtn.className='btn'; deptAddBtn.textContent='Нэмэх';
   deptAddBtn.onclick = async ()=>{
     const v = deptInput.value.trim();
     if(!v) return;
     if(state.departments.some(d=>norm(d.name)===norm(v))){ toast('Аль хэдийн байна'); return; }
-    const row = { id: uid(), name: v };
+    const row = { id: uid(), name: v, password: pwdInput.value.trim() || (norm(v)+'2026') };
     await dbInsert('departments', row);
     state.departments.push(row);
-    deptInput.value=''; render();
+    deptInput.value=''; pwdInput.value=''; render();
   };
-  deptRow.append(deptInput, deptAddBtn);
+  deptRow.append(deptInput, pwdInput, deptAddBtn);
   deptCard.appendChild(deptRow);
   const deptGrid = document.createElement('div'); deptGrid.className='dept-grid';
   if(state.departments.length===0){ deptGrid.innerHTML = '<div class="empty">Алба нэгж алга байна</div>'; }
@@ -252,6 +346,7 @@ function renderAdmin(app){
     const cCount = state.childAssets.filter(c=>c.department===d.name).length;
     const el2 = document.createElement('div'); el2.className='dept-card';
     el2.innerHTML = `<div class="name">${escapeHtml(d.name)}</div>
+      <div class="stat">Нууц үг: <span style="font-family:var(--mono)">${escapeHtml(d.password||'—')}</span></div>
       <div class="stat">Father asset: ${fCount}</div>
       <div class="stat">Child asset: ${cCount}</div>`;
     const rm = document.createElement('button'); rm.className='btn ghost small'; rm.style.marginTop='8px'; rm.textContent='Устгах';
@@ -445,14 +540,21 @@ async function runImport(kind, mapping, rows){
 
 // ================= WORK TAB =================
 function renderWork(app){
-  const sel = card('Алба нэгжээ сонгоно уу', 'Дараа нь тухайн алба нэгжийн ажлыг гүйцэтгэнэ.');
-  const row = document.createElement('div'); row.className='row';
-  const s = document.createElement('select'); s.style.minWidth='260px';
-  s.innerHTML = '<option value="">-- сонгох --</option>' + state.departments.map(d=>`<option ${state.currentDept===d.name?'selected':''} value="${escapeHtml(d.name)}">${escapeHtml(d.name)}</option>`).join('');
-  s.onchange = ()=>{ state.currentDept = s.value || null; render(); };
-  row.appendChild(s);
-  sel.appendChild(row);
-  app.appendChild(sel);
+  // Manager: dept fixed from session. Admin: can pick.
+  if(session.role==='manager'){
+    state.currentDept = session.deptName;
+    const banner = card(`Таны алба нэгж: ${session.deptName}`, 'Доор өөрийн Asset болон Item-ээ шалгаж баталгаажуулна. "Заавар" таб дээр алхам бүрийн тайлбар бий.');
+    app.appendChild(banner);
+  } else {
+    const sel = card('Алба нэгжээ сонгоно уу', 'Дараа нь тухайн алба нэгжийн ажлыг гүйцэтгэнэ.');
+    const row = document.createElement('div'); row.className='row';
+    const s = document.createElement('select'); s.style.minWidth='260px';
+    s.innerHTML = '<option value="">-- сонгох --</option>' + state.departments.map(d=>`<option ${state.currentDept===d.name?'selected':''} value="${escapeHtml(d.name)}">${escapeHtml(d.name)}</option>`).join('');
+    s.onchange = ()=>{ state.currentDept = s.value || null; render(); };
+    row.appendChild(s);
+    sel.appendChild(row);
+    app.appendChild(sel);
+  }
 
   if(!state.currentDept){
     app.appendChild(el('div','empty','Ажиллах алба нэгжээ сонгоно уу'));
@@ -716,14 +818,19 @@ let matrixSelectedChildIds = [];
 let matrixSelectedItemIds = [];
 
 function renderMatrix(app){
-  const sel = card('Алба нэгжээ сонгоно уу', 'Ижил төрлийн олон child asset-д зэрэг item тоо ширхэг оруулах горим.');
-  const row = document.createElement('div'); row.className='row';
-  const s = document.createElement('select'); s.style.minWidth='260px';
-  s.innerHTML = '<option value="">-- сонгох --</option>' + state.departments.map(d=>`<option ${state.currentDept===d.name?'selected':''} value="${escapeHtml(d.name)}">${escapeHtml(d.name)}</option>`).join('');
-  s.onchange = ()=>{ state.currentDept = s.value || null; matrixSelectedChildIds=[]; matrixSelectedItemIds=[]; render(); };
-  row.appendChild(s);
-  sel.appendChild(row);
-  app.appendChild(sel);
+  if(session.role==='manager'){
+    state.currentDept = session.deptName;
+    app.appendChild(card(`Matrix горим — ${session.deptName}`, 'Ижил төрлийн олон child asset-д зэрэг item тоо ширхэг оруулах.'));
+  } else {
+    const sel = card('Алба нэгжээ сонгоно уу', 'Ижил төрлийн олон child asset-д зэрэг item тоо ширхэг оруулах горим.');
+    const row = document.createElement('div'); row.className='row';
+    const s = document.createElement('select'); s.style.minWidth='260px';
+    s.innerHTML = '<option value="">-- сонгох --</option>' + state.departments.map(d=>`<option ${state.currentDept===d.name?'selected':''} value="${escapeHtml(d.name)}">${escapeHtml(d.name)}</option>`).join('');
+    s.onchange = ()=>{ state.currentDept = s.value || null; matrixSelectedChildIds=[]; matrixSelectedItemIds=[]; render(); };
+    row.appendChild(s);
+    sel.appendChild(row);
+    app.appendChild(sel);
+  }
 
   if(!state.currentDept){
     app.appendChild(el('div','empty','Ажиллах алба нэгжээ сонгоно уу'));
@@ -836,6 +943,48 @@ function renderMatrix(app){
   });
   gridCard.appendChild(table);
   app.appendChild(gridCard);
+}
+
+// ================= GUIDE TAB =================
+function renderGuide(app){
+  const intro = card('Ажлын зорилго', 'Одоогийн Oracle дахь Asset болон Spare part (Item) жагсаалтыг цэвэрлэж, зөв ангилж, шинэ Oracle Fusion руу оруулахад бэлэн болгох. Доорх алхмуудыг дараалан хийнэ.');
+  app.appendChild(intro);
+
+  const steps = card('Алхам алхмаар заавар', '');
+  const stepsHtml = `
+    <ol style="line-height:1.9;padding-left:20px;font-size:13px">
+      <li><b>"Миний ажил" таб</b> руу орно. Таны алба нэгж дээд талд харагдана.</li>
+      <li><b>Asset шалгах:</b> "Эзэмшигчгүй Father Asset" жагсаалтаас өөрт хамаарахыг хайж <b>"Миний"</b> дарж авна.</li>
+      <li><b>Дутуу Asset:</b> Жагсаалтад байхгүй asset байвал "Дутуу Asset нэмэх" хэсэгт нэрийг нь бичиж нэмнэ (код өгөхгүй).</li>
+      <li><b>Child asset болгож задлах:</b> Claim хийсэн asset бүрийг доор нээж, бодит эд ангиудад нь задална. Дүрмийг доор харна уу.</li>
+      <li><b>Item (Spare part) шалгах:</b> "Эзэмшигчгүй Item" жагсаалтаас өөрийн spare part-уудыг хайж "Миний" дарж авна. <b>Алба нэгж тодорхойгүй item-үүд эндээс бүгдэд харагдана</b> — өөрийнхийг олж аваарай.</li>
+      <li><b>Item баталгаажуулах:</b> "Миний Item-үүд" хэсэгт Category / Min / Max / UOM зөв эсэхийг шалгаж засаад, <b>"Идэвхтэй"</b> төлөвт шилжүүлнэ.</li>
+      <li><b>Хэрэггүй item:</b> Хэрэглэхгүй/давхардсан item-ийг <b>"Хасах санал"</b> эсвэл <b>"Устгах"</b> төлөвт тэмдэглэнэ.</li>
+      <li><b>Item-Asset холбох:</b> "Matrix горим" таб дээр ямар item аль child asset-д хэдэн ширхэг ордгийг бөглөнө.</li>
+    </ol>`;
+  steps.innerHTML += stepsHtml;
+  app.appendChild(steps);
+
+  const rule = card('Asset задлах дүрэм — хаана зогсох вэ?', 'Зогсох цэг = "Maintainable Item" түвшин.');
+  rule.innerHTML += `
+    <div style="font-size:13px;line-height:1.8">
+    Доорх 3 асуултын ядаж нэгэнд нь <b>"Тийм"</b> бол зөв түвшин — цаашид бүү задал:
+    <ol style="padding-left:20px">
+      <li>Үүнд тусад нь сэлбэг/item захиалж холбодог уу?</li>
+      <li>Энэ өөрөө бие даан эвдэрч, тусад нь засвар/PM хийдэг үү?</li>
+      <li>Үүнд тусад нь criticality (чухал зэрэг), тоолуур өгдөг үү?</li>
+    </ol>
+    <div style="background:#20362a;padding:8px 12px;border-radius:6px;margin:6px 0"><b style="color:var(--accent2)">ЗӨВ:</b> Насос систем → Насос #401, #402, #403 (тус бүр өөрийн сэлбэгтэй, тусад нь эвдэрдэг).</div>
+    <div style="background:#3a2226;padding:8px 12px;border-radius:6px;margin:6px 0"><b style="color:var(--danger)">БУРУУ (хэт гүн):</b> Насос #401 → Adapter → Bolt. Bolt бол ITEM, тусдаа asset болгохгүй.</div>
+    <div style="background:#3a2226;padding:8px 12px;border-radius:6px;margin:6px 0"><b style="color:var(--danger)">БУРУУ (хэт өнгөц):</b> Бүх насосыг нэг "Насос систем" болгож нэгтгэх — аль нь эвдэрснийг ялгахгүй болно.</div>
+    <b>Энгийн шалгуур:</b> "Үүнийг сольж/засварлахдаа СЭЛБЭГ ЗАХИАЛДАГ уу? Тийм бол child asset. Зөвхөн бүхэлдээ солигддог жижиг эд анги бол ITEM."
+    </div>`;
+  app.appendChild(rule);
+
+  app.appendChild(exemplarCard());
+
+  const done = card('Дуусгах', 'Бүх Asset claim хийж задалсан, бүх Item-ээ "Идэвхтэй" эсвэл "Устгах" төлөвт оруулж, Matrix холболтоо хийж дуусаад ажил дуусна. Гана (админ) эцсийн файлыг татаж нэгтгэнэ.');
+  app.appendChild(done);
 }
 
 // ================= EXPORT TAB =================
