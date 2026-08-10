@@ -633,6 +633,43 @@ function myProgressBanner(deptName){
   return wrap;
 }
 
+function mySummaryCard(deptName){
+  const s = deptProgressStatus(deptName);
+  // Count total assets and items belonging to this dept (including unclaimed items suggested for this dept)
+  const totalMyAssets = state.fatherAssets.filter(a=>a.department===deptName).length;
+  const totalMyItems = state.items.filter(it=>it.department===deptName).length;
+  const unclaimedSuggested = state.items.filter(it=>!it.department && it.suggested_department===deptName).length;
+
+  const c = card(`📊 ${deptName} — Ажлын явц`, '');
+
+  // Big numbers row
+  const nums = document.createElement('div');
+  nums.style.cssText='display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:10px 0;';
+  [
+    ['Father Asset', totalMyAssets, 'var(--accent)'],
+    ['Child Asset', s.childDone, 'var(--accent2)'],
+    [`Item (Spare parts)`, totalMyItems, '#f0a500'],
+  ].forEach(([label,num,color])=>{
+    const stat = document.createElement('div');
+    stat.style.cssText=`background:var(--panel);padding:14px;border-radius:8px;border-left:4px solid ${color};`;
+    stat.innerHTML=`<div style="font-size:11px;color:var(--sub);margin-bottom:4px">${label}</div><div style="font-size:28px;font-weight:700;color:${color}">${num}</div>`;
+    nums.appendChild(stat);
+  });
+  c.appendChild(nums);
+
+  // Suggested but unclaimed hint
+  if(unclaimedSuggested>0){
+    const hint = document.createElement('div');
+    hint.style.cssText='font-size:12px;color:var(--accent);margin-bottom:8px;';
+    hint.textContent=`ℹ️ "Item шалгах" табд таны алба нэгжид санал болгосон ${unclaimedSuggested} item эзэмшигчгүй байна — "Манай албаных" дарж авна уу.`;
+    c.appendChild(hint);
+  }
+
+  // Progress chips
+  c.appendChild(myProgressBanner(deptName));
+  return c;
+}
+
 // ================= ASSET TAB =================
 function renderAssetTab(app){
   if(!ensureDept(app, 'Asset шалгаж, child asset болгож задлах.')) return;
@@ -644,8 +681,10 @@ function renderAssetTab(app){
     app.appendChild(b);
   }
 
+  app.appendChild(mySummaryCard(dept));
+
   const unclaimed = state.fatherAssets.filter(a=>!a.department);
-  const unclaimedCard = card(`1. Эзэмшигчгүй Father Asset (${unclaimed.length})`, 'Өөрт хамаарах asset-ыг олж "Миний" гэж тэмдэглэ.');
+  const unclaimedCard = card(`1. Эзэмшигчгүй Father Asset (${unclaimed.length})`, 'Өөрт хамаарах asset-ыг олж "Манай албаных" гэж тэмдэглэ.');
   if(unclaimed.length===0){ unclaimedCard.appendChild(el('div','empty','Эзэмшигчгүй asset алга')); }
   else {
     const search = document.createElement('input'); search.type='text'; search.placeholder='Хайх...'; search.style.width='100%'; search.style.marginBottom='10px';
@@ -656,7 +695,7 @@ function renderAssetTab(app){
       const filtered = unclaimed.filter(a=> !f || norm(a.code).includes(f) || norm(a.name).includes(f));
       const t = document.createElement('table');
       t.innerHTML = '<tr><th>Код</th><th>Нэр</th><th></th></tr>' + filtered.slice(0,150).map(a=>
-        `<tr><td style="font-family:var(--mono)">${escapeHtml(a.code)}</td><td>${escapeHtml(a.name)}</td><td><button class="btn small" data-id="${a.id}">Миний</button></td></tr>`
+        `<tr><td style="font-family:var(--mono)">${escapeHtml(a.code)}</td><td>${escapeHtml(a.name)}</td><td><button class="btn small" data-id="${a.id}">Манай албаных</button></td></tr>`
       ).join('');
       listWrap.innerHTML=''; listWrap.appendChild(t);
       t.querySelectorAll('button[data-id]').forEach(b=>{
@@ -709,10 +748,12 @@ function renderItemTab(app){
     app.appendChild(b);
   }
 
+  app.appendChild(mySummaryCard(dept));
+
   app.appendChild(exemplarCard());
 
   const unclaimedItems = state.items.filter(it=>!it.department);
-  const uiCard = card(`1. Эзэмшигчгүй Item (${unclaimedItems.length})`, 'Алба нэгж тодорхойгүй бүх item эндээс харагдана. Өөрт хамаарахыг олж "Миний" гэж ав. Улаан тэмдэгтэй нь эх файлд "хасах" гэж санал болгосон.');
+  const uiCard = card(`1. Эзэмшигчгүй Item (${unclaimedItems.length})`, 'Алба нэгж тодорхойгүй бүх item эндээс харагдана. Өөрт хамаарахыг олж "Манай албаных" гэж ав. Улаан тэмдэгтэй нь эх файлд "хасах" гэж санал болгосон.');
   if(unclaimedItems.length===0){ uiCard.appendChild(el('div','empty','Эзэмшигчгүй item алга')); }
   else {
     const search = document.createElement('input'); search.type='text'; search.placeholder='Хайх (код/нэр)...'; search.style.width='100%'; search.style.marginBottom='10px';
@@ -724,7 +765,7 @@ function renderItemTab(app){
       const t = document.createElement('table');
       t.innerHTML = '<tr><th>Код</th><th>Нэр</th><th>Санал (лавлагаа)</th><th>Төлөв</th><th></th></tr>' + filtered.slice(0,150).map(it=>{
         const removeTag = it.status==='remove_pending' ? '<span class="tag dup">Хасах санал</span>' : '';
-        return `<tr><td style="font-family:var(--mono)">${escapeHtml(it.code)}</td><td>${escapeHtml(it.name)}</td><td class="link-note">${escapeHtml(it.suggested_department||'')}</td><td>${removeTag}</td><td><button class="btn small" data-id="${it.id}">Миний</button></td></tr>`;
+        return `<tr><td style="font-family:var(--mono)">${escapeHtml(it.code)}</td><td>${escapeHtml(it.name)}</td><td class="link-note">${escapeHtml(it.suggested_department||'')}</td><td>${removeTag}</td><td><button class="btn small" data-id="${it.id}">Манай албаных</button></td></tr>`;
       }).join('');
       listWrap.innerHTML=''; listWrap.appendChild(t);
       t.querySelectorAll('button[data-id]').forEach(b=>{
@@ -1125,7 +1166,7 @@ function renderGuide(app){
       <li><b>"Asset шалгах" таб:</b> "Эзэмшигчгүй Father Asset" жагсаалтаас өөрт хамаарахыг хайж <b>"Миний"</b> дарж авна.</li>
       <li><b>Дутуу Asset:</b> Жагсаалтад байхгүй asset байвал "Дутуу Asset нэмэх" хэсэгт нэрийг нь бичиж нэмнэ (код өгөхгүй).</li>
       <li><b>Child asset болгож задлах:</b> "Миний Asset-ууд" хэсэгт claim хийсэн asset бүрийг дарж нээгээд, бодит эд ангиудад нь задална. Дүрмийг доор харна уу.</li>
-      <li><b>"Item (Spare parts) шалгах" таб:</b> "Эзэмшигчгүй Item" жагсаалтаас өөрийн spare part-уудыг хайж "Миний" дарж авна. <b>Алба нэгж тодорхойгүй item-үүд эндээс бүгдэд харагдана.</b></li>
+      <li><b>"Item (Spare parts) шалгах" таб:</b> "Эзэмшигчгүй Item" жагсаалтаас өөрийн spare part-уудыг хайж "Манай албаных" дарж авна. <b>Алба нэгж тодорхойгүй item-үүд эндээс бүгдэд харагдана.</b></li>
       <li><b>Item баталгаажуулах:</b> "Миний Item-үүд" хэсэгт Category / Min / Max / UOM зөв эсэхийг шалгаж засаад, <b>"Идэвхтэй"</b> төлөвт шилжүүлнэ.</li>
       <li><b>Хэрэггүй item:</b> Хэрэглэхгүй/давхардсан item-ийг <b>"Хасах санал"</b> эсвэл <b>"Устгах"</b> төлөвт тэмдэглэнэ.</li>
       <li><b>"Item↔Asset холбох" таб:</b> ямар item аль child asset-д хэдэн ширхэг ордгийг бөглөнө.</li>
