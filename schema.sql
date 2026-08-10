@@ -70,3 +70,25 @@ create policy "allow all - father_assets" on father_assets for all using (true) 
 create policy "allow all - child_assets" on child_assets for all using (true) with check (true);
 create policy "allow all - items" on items for all using (true) with check (true);
 create policy "allow all - links" on links for all using (true) with check (true);
+
+-- ===== 11 АЛБА НЭГЖИЙГ ИДЭВХЖҮҮЛЭХ =====
+-- Эхлээд полиси хасна (доторхи INSERT-с гаргалцахын тулд):
+drop policy if exists "allow all - departments" on departments;
+
+-- 11 алба нэгжийг departments хүснэгтэд оруулна:
+insert into departments (id, name) values
+  ('dept_wctd', 'WCTD'),
+  ('dept_hsd', 'HSD'),
+  ('dept_tod', 'TOD'),
+  ('dept_eeod', 'EEOD'),
+  ('dept_bod', 'BOD'),
+  ('dept_cd', 'CD'),
+  ('dept_mc', 'MC'),
+  ('dept_ica', 'ICA'),
+  ('dept_opr', 'OPR'),
+  ('dept_sd', 'SD'),
+  ('dept_ccl', 'CCL')
+on conflict (id) do nothing;
+
+-- Полиси дахин идэвхжүүлэх:
+create policy "allow all - departments" on departments for all using (true) with check (true);
