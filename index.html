@@ -1,0 +1,922 @@
+<!DOCTYPE html>
+<html lang="mn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Asset & Item Баталгаажуулалт</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<style>
+  :root{
+    --bg:#12181f; --panel:#1a2029; --panel2:#212933; --line:#2b3542;
+    --text:#e7edf3; --sub:#8b98a8; --accent:#e8a33d; --accent2:#4dd0a5;
+    --danger:#e0616b; --mono:'SFMono-Regular',Consolas,'Liberation Mono',monospace;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:14px;}
+  .topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 22px;background:var(--panel);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:10;flex-wrap:wrap;gap:10px;}
+  .brand{display:flex;align-items:center;gap:10px;}
+  .brand .mark{width:10px;height:10px;background:var(--accent);border-radius:2px;transform:rotate(45deg);}
+  .brand h1{font-size:15px;margin:0;font-weight:600;letter-spacing:.3px;}
+  .brand .sub{font-size:11px;color:var(--sub);margin-left:8px;}
+  nav{display:flex;gap:4px;}
+  nav button{background:none;border:1px solid transparent;color:var(--sub);padding:7px 14px;border-radius:6px;font-size:13px;cursor:pointer;}
+  nav button.active{background:var(--panel2);color:var(--text);border-color:var(--line);}
+  main{max-width:1180px;margin:0 auto;padding:22px;}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px 20px;margin-bottom:16px;}
+  .card h2{font-size:14px;margin:0 0 4px;font-weight:600;}
+  .card .desc{color:var(--sub);font-size:12.5px;margin-bottom:14px;}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;}
+  select,input[type=text],input[type=number],input[type=password]{background:var(--panel2);border:1px solid var(--line);color:var(--text);padding:8px 10px;border-radius:6px;font-size:13px;}
+  button.btn{background:var(--accent);border:none;color:#1a1206;font-weight:600;padding:8px 16px;border-radius:6px;cursor:pointer;font-size:13px;}
+  button.btn.secondary{background:var(--panel2);color:var(--text);border:1px solid var(--line);}
+  button.btn.ghost{background:none;color:var(--sub);border:1px solid var(--line);}
+  button.btn.danger{background:var(--danger);color:#fff;}
+  button.btn:disabled{opacity:.4;cursor:not-allowed;}
+  button.btn.small{padding:4px 10px;font-size:12px;}
+  table{width:100%;border-collapse:collapse;font-size:12.5px;}
+  th{text-align:left;color:var(--sub);font-weight:600;padding:8px 8px;border-bottom:1px solid var(--line);white-space:nowrap;}
+  td{padding:7px 8px;border-bottom:1px solid #232b35;vertical-align:middle;}
+  tr:hover td{background:#1d2530;}
+  .tag{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600;}
+  .tag.dup{background:#3a2226;color:var(--danger);}
+  .progress-wrap{background:var(--panel2);border-radius:6px;height:8px;overflow:hidden;}
+  .progress-bar{height:100%;background:var(--accent2);}
+  .dept-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;}
+  .dept-card{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:12px;}
+  .dept-card .name{font-weight:600;font-size:13px;margin-bottom:6px;}
+  .dept-card .stat{color:var(--sub);font-size:11.5px;margin-top:4px;}
+  .empty{color:var(--sub);text-align:center;padding:30px;font-size:13px;}
+  .child-block{border:1px solid var(--line);border-radius:8px;padding:12px;margin-top:10px;background:var(--panel2);}
+  .flex-between{display:flex;justify-content:space-between;align-items:center;}
+  .field-inline{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:4px;}
+  .field-inline label{color:var(--sub);font-size:11px;}
+  .field-inline input{width:70px;padding:4px 6px;font-size:12px;}
+  .search-box{position:relative;}
+  .search-results{position:absolute;top:100%;left:0;right:0;background:var(--panel2);border:1px solid var(--line);border-radius:6px;max-height:220px;overflow:auto;z-index:20;margin-top:2px;}
+  .search-results div{padding:7px 10px;cursor:pointer;font-size:12.5px;border-bottom:1px solid #232b35;}
+  .search-results div:hover{background:#28323e;}
+  .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:100;}
+  .modal{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:20px;width:480px;max-width:92vw;max-height:85vh;overflow:auto;}
+  .modal h3{margin-top:0;font-size:14px;}
+  .col{display:flex;flex-direction:column;gap:4px;margin-bottom:10px;}
+  .col label{font-size:11.5px;color:var(--sub);}
+  .toast{position:fixed;bottom:20px;right:20px;background:var(--panel2);border:1px solid var(--line);padding:10px 16px;border-radius:8px;font-size:13px;z-index:200;}
+  .link-note{font-size:11px;color:var(--sub);}
+  .conn-badge{font-size:11px;padding:3px 9px;border-radius:20px;}
+  .conn-ok{background:#20362a;color:var(--accent2);}
+  .conn-bad{background:#3a2226;color:var(--danger);}
+  .setup-screen{max-width:520px;margin:60px auto;text-align:center;}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="brand"><div class="mark"></div><h1>Asset Баталгаажуулалт</h1><span class="sub">Oracle Fusion бэлтгэл</span></div>
+  <nav id="navBar"></nav>
+  <span id="connBadge" class="conn-badge"></span>
+</div>
+<main id="app"></main>
+<div id="modalRoot"></div>
+<div id="toastRoot"></div>
+
+<script>
+/* =========================================================
+   SUPABASE ТОХИРГОО
+   Доорх хоёр утгыг Supabase Dashboard -> Project Settings -> API-с аваад бичнэ.
+   ========================================================= */
+const SUPABASE_URL = "https://ggqeonhfawwsrzfavjpb.supabase.co"; // жишээ: https://abcdefgh.supabase.co
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdxZW9uaHdmYXd3c3J6ZmF2anBiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYyOTYxNTcsImV4cCI6MjEwMTg3MjE1N30.DwgPU3v3u7fUkJux0u_468qiVL7lLDYTx2ZHJxWDS84";
+
+let sb = null;
+let connOk = false;
+try{
+  if(SUPABASE_URL && SUPABASE_URL !== "YOUR_SUPABASE_URL"){
+    sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  }
+}catch(e){ console.error(e); }
+
+const uid = () => Math.random().toString(36).slice(2,10);
+const norm = s => (s||'').toString().trim().toLowerCase().replace(/\s+/g,' ');
+
+let state = {
+  departments: [],   // {id, name}
+  fatherAssets: [],  // {id, code, name, department, source}
+  childAssets: [],   // {id, father_id, name, qty, department}
+  items: [],         // {id, code, name, category, min, max, uom}
+  links: [],         // {id, child_asset_id, item_id, qty, verified, corr_category, corr_min, corr_max, corr_uom}
+  currentTab: 'admin',
+  currentDept: null,
+};
+
+function toast(msg){
+  const t = document.createElement('div');
+  t.className = 'toast'; t.textContent = msg;
+  document.getElementById('toastRoot').appendChild(t);
+  setTimeout(()=>t.remove(), 2200);
+}
+
+// ---------- SUPABASE DATA LAYER ----------
+async function loadAll(){
+  if(!sb){ renderSetupScreen(); return; }
+  try{
+    const [d,f,c,i,l] = await Promise.all([
+      sb.from('departments').select('*'),
+      sb.from('father_assets').select('*'),
+      sb.from('child_assets').select('*'),
+      sb.from('items').select('*'),
+      sb.from('links').select('*'),
+    ]);
+    for(const r of [d,f,c,i,l]){ if(r.error) throw r.error; }
+    state.departments = d.data || [];
+    state.fatherAssets = f.data || [];
+    state.childAssets = c.data || [];
+    state.items = i.data || [];
+    state.links = l.data || [];
+    connOk = true;
+  }catch(e){
+    console.error(e);
+    connOk = false;
+    toast('Supabase холболтын алдаа: ' + e.message);
+  }
+  updateConnBadge();
+  render();
+}
+function updateConnBadge(){
+  const b = document.getElementById('connBadge');
+  if(!sb){ b.textContent = 'Тохируулаагүй'; b.className = 'conn-badge conn-bad'; return; }
+  b.textContent = connOk ? 'Холбогдсон' : 'Холболтын алдаа';
+  b.className = 'conn-badge ' + (connOk ? 'conn-ok' : 'conn-bad');
+}
+
+async function dbInsert(table, row){
+  const { error } = await sb.from(table).insert(row);
+  if(error){ toast('Алдаа: '+error.message); throw error; }
+}
+async function dbUpdate(table, id, patch){
+  const { error } = await sb.from(table).update(patch).eq('id', id);
+  if(error){ toast('Алдаа: '+error.message); throw error; }
+}
+async function dbDelete(table, id){
+  const { error } = await sb.from(table).delete().eq('id', id);
+  if(error){ toast('Алдаа: '+error.message); throw error; }
+}
+async function dbDeleteMatch(table, col, val){
+  const { error } = await sb.from(table).delete().eq(col, val);
+  if(error){ toast('Алдаа: '+error.message); throw error; }
+}
+
+// ---------- NAV ----------
+function renderNav(){
+  const nav = document.getElementById('navBar');
+  nav.innerHTML = '';
+  const tabs = [['admin','Ерөнхий/Тохиргоо'],['work','Алба нэгжийн ажил'],['matrix','Matrix горим'],['export','Экспорт']];
+  tabs.forEach(([key,label])=>{
+    const b = document.createElement('button');
+    b.textContent = label;
+    b.className = state.currentTab===key ? 'active':'';
+    b.onclick = ()=>{ state.currentTab=key; render(); };
+    nav.appendChild(b);
+  });
+}
+
+function renderSetupScreen(){
+  updateConnBadge();
+  const app = document.getElementById('app');
+  app.innerHTML = '';
+  document.getElementById('navBar').innerHTML = '';
+  const wrap = document.createElement('div'); wrap.className='setup-screen';
+  wrap.innerHTML = `<h2>Supabase холболт тохируулаагүй байна</h2>
+    <p class="desc">index.html файлын эхэнд байгаа <b>SUPABASE_URL</b> болон <b>SUPABASE_ANON_KEY</b> утгыг
+    Supabase Dashboard -> Project Settings -> API хэсгээс аваад бичээд дахин deploy хийнэ үү.</p>`;
+  app.appendChild(wrap);
+}
+
+// ---------- RENDER ROOT ----------
+function render(){
+  if(!sb){ renderSetupScreen(); return; }
+  renderNav();
+  updateConnBadge();
+  const app = document.getElementById('app');
+  app.innerHTML = '';
+  if(state.currentTab==='admin') renderAdmin(app);
+  else if(state.currentTab==='work') renderWork(app);
+  else if(state.currentTab==='matrix') renderMatrix(app);
+  else renderExport(app);
+}
+
+const EXEMPLAR_ITEM = {
+  code: '2410172200012',
+  name: 'Үнсний конвейерын хөтлөх араа (Sprocket)',
+  spec: 'Dn450, dn110, b170, z=8',
+  equip: 'Үнсний конвейер',
+  uom: 'EA', min: '1', max: '2', crit: 'P1', dept: 'HSD',
+  category: 'Conveyors and accessories (Material handling machinery)'
+};
+function exemplarCard(){
+  const c = card('Жишиг Item — иймэрхүү бүрэн, зөв бөглөнө', 'Item Code-ийн эхний 8 орон нь UNSPSC ангиллын кодтой яг таарч байх ёстой.');
+  c.innerHTML += `
+    <table style="margin-top:4px">
+      <tr><th>Код</th><td style="font-family:var(--mono)">${EXEMPLAR_ITEM.code}</td></tr>
+      <tr><th>Нэр</th><td>${EXEMPLAR_ITEM.name}</td></tr>
+      <tr><th>Spec</th><td>${EXEMPLAR_ITEM.spec}</td></tr>
+      <tr><th>Хамаарах систем</th><td>${EXEMPLAR_ITEM.equip}</td></tr>
+      <tr><th>UOM / Min / Max</th><td>${EXEMPLAR_ITEM.uom} / ${EXEMPLAR_ITEM.min} / ${EXEMPLAR_ITEM.max}</td></tr>
+      <tr><th>Чухал түвшин</th><td>${EXEMPLAR_ITEM.crit}</td></tr>
+      <tr><th>Категори</th><td>${EXEMPLAR_ITEM.category}</td></tr>
+    </table>
+    <div class="desc" style="margin-top:8px">Нэрийг "Монгол нэр (English name)" загвараар, Spec-д зөвхөн хэмжээ/параметр (тайлбар биш), категори нь item-ийн бодит функцтэй таарсан байх ёстой.</div>`;
+  return c;
+}
+
+// ================= ADMIN TAB =================
+function renderAdmin(app){
+  const deptCard = card('Алба нэгжүүд', 'Уулзах 16 алба нэгжийн нэрсийг энд оруулна.');
+  const deptRow = document.createElement('div'); deptRow.className='row'; deptRow.style.marginBottom='10px';
+  const deptInput = document.createElement('input'); deptInput.type='text'; deptInput.placeholder='Алба нэгжийн нэр...'; deptInput.style.flex='1';
+  const deptAddBtn = document.createElement('button'); deptAddBtn.className='btn'; deptAddBtn.textContent='Нэмэх';
+  deptAddBtn.onclick = async ()=>{
+    const v = deptInput.value.trim();
+    if(!v) return;
+    if(state.departments.some(d=>norm(d.name)===norm(v))){ toast('Аль хэдийн байна'); return; }
+    const row = { id: uid(), name: v };
+    await dbInsert('departments', row);
+    state.departments.push(row);
+    deptInput.value=''; render();
+  };
+  deptRow.append(deptInput, deptAddBtn);
+  deptCard.appendChild(deptRow);
+  const deptGrid = document.createElement('div'); deptGrid.className='dept-grid';
+  if(state.departments.length===0){ deptGrid.innerHTML = '<div class="empty">Алба нэгж алга байна</div>'; }
+  state.departments.forEach(d=>{
+    const fCount = state.fatherAssets.filter(a=>a.department===d.name).length;
+    const cCount = state.childAssets.filter(c=>c.department===d.name).length;
+    const el2 = document.createElement('div'); el2.className='dept-card';
+    el2.innerHTML = `<div class="name">${escapeHtml(d.name)}</div>
+      <div class="stat">Father asset: ${fCount}</div>
+      <div class="stat">Child asset: ${cCount}</div>`;
+    const rm = document.createElement('button'); rm.className='btn ghost small'; rm.style.marginTop='8px'; rm.textContent='Устгах';
+    rm.onclick = async ()=>{ await dbDelete('departments', d.id); state.departments = state.departments.filter(x=>x.id!==d.id); render(); };
+    el2.appendChild(rm);
+    deptGrid.appendChild(el2);
+  });
+  deptCard.appendChild(deptGrid);
+  app.appendChild(deptCard);
+
+  const impF = card('Father Asset жагсаалт импортлох', 'Oracle-с гаргасан fixed asset (father) list-ийн CSV файлыг оруулна. Багана: код, нэр/тайлбар.');
+  const impFInput = document.createElement('input'); impFInput.type='file'; impFInput.accept='.csv';
+  impFInput.onchange = e => handleCsvImport(e, 'father');
+  impF.appendChild(impFInput);
+  const impFStat = document.createElement('div'); impFStat.className='desc'; impFStat.style.marginTop='10px';
+  impFStat.textContent = `Одоогоор орсон father asset: ${state.fatherAssets.length}`;
+  impF.appendChild(impFStat);
+  app.appendChild(impF);
+
+  const impI = card('Item List импортлох', 'Item list-ийн CSV файлыг оруулна. Багана: код, нэр, категори, min, max, uom.');
+  const impIInput = document.createElement('input'); impIInput.type='file'; impIInput.accept='.csv';
+  impIInput.onchange = e => handleCsvImport(e, 'item');
+  impI.appendChild(impIInput);
+  const impIStat = document.createElement('div'); impIStat.className='desc'; impIStat.style.marginTop='10px';
+  impIStat.textContent = `Одоогоор орсон item: ${state.items.length}`;
+  impI.appendChild(impIStat);
+  app.appendChild(impI);
+
+  const prog = card('Явцын самбар', 'Алба нэгж бүрийн claim болон баталгаажуулалтын явц.');
+  const totalFather = state.fatherAssets.length;
+  const claimedFather = state.fatherAssets.filter(a=>a.department).length;
+  const totalLinks = state.links.length;
+  const verifiedLinks = state.links.filter(l=>l.verified).length;
+  prog.appendChild(progressRow('Father asset claim хийгдсэн', claimedFather, totalFather));
+  prog.appendChild(progressRow('Item холболт баталгаажсан', verifiedLinks, totalLinks || 1));
+  const deptTable = document.createElement('table');
+  deptTable.innerHTML = `<tr><th>Алба нэгж</th><th>Father</th><th>Child</th><th>Холбосон item</th><th>Баталгаажсан</th></tr>` +
+    state.departments.map(d=>{
+      const f = state.fatherAssets.filter(a=>a.department===d.name).length;
+      const cList = state.childAssets.filter(x=>x.department===d.name);
+      const cIds = cList.map(x=>x.id);
+      const l = state.links.filter(x=>cIds.includes(x.child_asset_id));
+      const v = l.filter(x=>x.verified).length;
+      return `<tr><td>${escapeHtml(d.name)}</td><td>${f}</td><td>${cList.length}</td><td>${l.length}</td><td>${v}/${l.length}</td></tr>`;
+    }).join('');
+  prog.appendChild(deptTable);
+  app.appendChild(prog);
+
+  // Item status overview
+  const itemStat = card('Item-ийн ерөнхий байдал', 'Алба нэгжид хуваарилагдаагүй, шалгагдаагүй болон хасахаар санал болгосон item-ийн тоо.');
+  const totalItems = state.items.length;
+  const unclaimedItems = state.items.filter(it=>!it.department).length;
+  const removePending = state.items.filter(it=>it.status==='remove_pending').length;
+  const activeConfirmed = state.items.filter(it=>it.status==='active').length;
+  const removedConfirmed = state.items.filter(it=>it.status==='removed').length;
+  const statTable = document.createElement('table');
+  statTable.innerHTML = `<tr><th>Нийт item</th><th>Эзэмшигчгүй</th><th>Хасахаар санал болгосон</th><th>Баталгаажсан идэвхтэй</th><th>Баталгаажсан устгагдсан</th></tr>
+    <tr><td>${totalItems}</td><td>${unclaimedItems}</td><td>${removePending}</td><td>${activeConfirmed}</td><td>${removedConfirmed}</td></tr>`;
+  itemStat.appendChild(statTable);
+  app.appendChild(itemStat);
+
+  app.appendChild(exemplarCard());
+
+  const dup = card('Давхардсан item илрүүлэлт', 'Ижил нэртэй боловч өөр код-той item-үүд (цэвэрлэх шаардлагатай).');
+  const groups = {};
+  state.items.forEach(it=>{ const k = norm(it.name); (groups[k] = groups[k]||[]).push(it); });
+  const dupGroups = Object.values(groups).filter(g=>g.length>1);
+  if(dupGroups.length===0){ dup.appendChild(el('div','empty','Давхардал олдсонгүй (эсвэл item list импортлогдоогүй байна)')); }
+  else {
+    const t = document.createElement('table');
+    t.innerHTML = '<tr><th>Нэр</th><th>Кодууд</th><th>Тоо</th></tr>' +
+      dupGroups.slice(0,200).map(g=>`<tr><td>${escapeHtml(g[0].name)}</td><td style="font-family:var(--mono)">${g.map(x=>x.code).join(', ')}</td><td><span class="tag dup">${g.length}</span></td></tr>`).join('');
+    dup.appendChild(t);
+    if(dupGroups.length>200){ dup.appendChild(el('div','desc',`+ дахин ${dupGroups.length-200} бүлэг...`)); }
+  }
+  app.appendChild(dup);
+}
+
+function progressRow(label, num, den){
+  const wrap = document.createElement('div'); wrap.style.marginBottom='12px';
+  const pct = den>0 ? Math.round(num/den*100) : 0;
+  wrap.innerHTML = `<div class="flex-between"><span>${label}</span><span class="sub" style="color:var(--sub)">${num}/${den} (${pct}%)</span></div>
+    <div class="progress-wrap"><div class="progress-bar" style="width:${pct}%"></div></div>`;
+  return wrap;
+}
+
+async function handleCsvImport(e, kind){
+  const file = e.target.files[0];
+  if(!file) return;
+  Papa.parse(file, { header:true, skipEmptyLines:true, complete: async (res)=>{
+    const cols = res.meta.fields || [];
+    openColumnMapModal(kind, cols, res.data);
+  }});
+}
+
+function openColumnMapModal(kind, cols, rows){
+  const root = document.getElementById('modalRoot');
+  const fields = kind==='father'
+    ? [['code','Код'],['name','Нэр/Тайлбар']]
+    : [['code','Код'],['name','Нэр'],['category','Категори'],['min','Min'],['max','Max'],['uom','UOM'],['department','Алба нэгж (лавлагаа, заавал биш)'],['note','Тайлбар (заавал биш)']];
+  const bg = document.createElement('div'); bg.className='modal-bg';
+  const modal = document.createElement('div'); modal.className='modal';
+  modal.innerHTML = `<h3>${kind==='father'?'Father Asset':'Item'} багана харгалзуулах</h3>
+    <div class="desc">CSV-ийн ямар багана юу болохыг сонгоно уу. (${rows.length} мөр)</div>`;
+  const selects = {};
+  fields.forEach(([key,label])=>{
+    const colDiv = document.createElement('div'); colDiv.className='col';
+    colDiv.innerHTML = `<label>${label}</label>`;
+    const sel = document.createElement('select');
+    sel.innerHTML = '<option value="">-- сонгох --</option>' + cols.map(c=>`<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+    const guess = cols.find(c=>norm(c).includes(key) || (key==='name' && norm(c).includes('desc')) || (key==='name' && norm(c).includes('нэр')) || (key==='code' && norm(c).includes('код')));
+    if(guess) sel.value = guess;
+    colDiv.appendChild(sel);
+    modal.appendChild(colDiv);
+    selects[key] = sel;
+  });
+  const btnRow = document.createElement('div'); btnRow.className='row'; btnRow.style.justifyContent='flex-end';
+  const cancel = document.createElement('button'); cancel.className='btn ghost'; cancel.textContent='Цуцлах'; cancel.onclick=()=>bg.remove();
+  const ok = document.createElement('button'); ok.className='btn'; ok.textContent='Импортлох';
+  ok.onclick = async ()=>{
+    const mapping = {}; fields.forEach(([key])=>mapping[key]=selects[key].value);
+    if(!mapping.code || !mapping.name){ toast('Код, Нэр багана заавал сонгоно уу'); return; }
+    ok.disabled = true; ok.textContent = 'Импортлож байна...';
+    await runImport(kind, mapping, rows);
+    bg.remove();
+  };
+  btnRow.append(cancel, ok);
+  modal.appendChild(btnRow);
+  bg.appendChild(modal);
+  root.appendChild(bg);
+}
+
+const REMOVE_KEYWORDS = ["хасах","давхард","хэрэглэхгүй","утгах","байхгүй","ашиглахгүй","шаардлагагүй"];
+function detectStatus(note){
+  const n = norm(note);
+  if(!n) return 'needs_review';
+  return REMOVE_KEYWORDS.some(k=>n.includes(k)) ? 'remove_pending' : 'needs_review';
+}
+
+async function runImport(kind, mapping, rows){
+  const BATCH = 500;
+  if(kind==='father'){
+    const existingCodes = new Set(state.fatherAssets.map(a=>a.code));
+    const toInsert = [];
+    rows.forEach(r=>{
+      const code = (r[mapping.code]||'').toString().trim();
+      const name = (r[mapping.name]||'').toString().trim();
+      if(!code || existingCodes.has(code)) return;
+      toInsert.push({ id: uid(), code, name, department: null, source: 'import' });
+      existingCodes.add(code);
+    });
+    for(let i=0;i<toInsert.length;i+=BATCH){
+      const chunk = toInsert.slice(i,i+BATCH);
+      const { error } = await sb.from('father_assets').insert(chunk);
+      if(error){ toast('Импортын алдаа: '+error.message); break; }
+      state.fatherAssets.push(...chunk);
+    }
+    toast(`${toInsert.length} father asset импортлогдлоо`);
+  } else {
+    const existingCodes = new Set(state.items.map(i=>i.code));
+    const toInsert = [];
+    rows.forEach(r=>{
+      const code = (r[mapping.code]||'').toString().trim();
+      const name = (r[mapping.name]||'').toString().trim();
+      if(!code || existingCodes.has(code)) return;
+      const note = mapping.note ? (r[mapping.note]||'').toString().trim() : '';
+      const suggestedDept = mapping.department ? (r[mapping.department]||'').toString().trim() : '';
+      toInsert.push({
+        id: uid(), code, name,
+        category: mapping.category ? (r[mapping.category]||'').toString().trim() : '',
+        min: mapping.min ? (r[mapping.min]||'').toString().trim() : '',
+        max: mapping.max ? (r[mapping.max]||'').toString().trim() : '',
+        uom: mapping.uom ? (r[mapping.uom]||'').toString().trim() : '',
+        department: null,
+        suggested_department: suggestedDept,
+        status: detectStatus(note),
+        note: note,
+      });
+      existingCodes.add(code);
+    });
+    for(let i=0;i<toInsert.length;i+=BATCH){
+      const chunk = toInsert.slice(i,i+BATCH);
+      const { error } = await sb.from('items').insert(chunk);
+      if(error){ toast('Импортын алдаа: '+error.message); break; }
+      state.items.push(...chunk);
+    }
+    toast(`${toInsert.length} item импортлогдлоо`);
+  }
+  render();
+}
+
+// ================= WORK TAB =================
+function renderWork(app){
+  const sel = card('Алба нэгжээ сонгоно уу', 'Дараа нь тухайн алба нэгжийн ажлыг гүйцэтгэнэ.');
+  const row = document.createElement('div'); row.className='row';
+  const s = document.createElement('select'); s.style.minWidth='260px';
+  s.innerHTML = '<option value="">-- сонгох --</option>' + state.departments.map(d=>`<option ${state.currentDept===d.name?'selected':''} value="${escapeHtml(d.name)}">${escapeHtml(d.name)}</option>`).join('');
+  s.onchange = ()=>{ state.currentDept = s.value || null; render(); };
+  row.appendChild(s);
+  sel.appendChild(row);
+  app.appendChild(sel);
+
+  if(!state.currentDept){
+    app.appendChild(el('div','empty','Ажиллах алба нэгжээ сонгоно уу'));
+    return;
+  }
+  const dept = state.currentDept;
+
+  const unclaimed = state.fatherAssets.filter(a=>!a.department);
+  const unclaimedCard = card(`Эзэмшигчгүй Father Asset (${unclaimed.length})`, 'Өөрт хамаарах asset-ыг олж "Миний" гэж тэмдэглэ.');
+  if(unclaimed.length===0){ unclaimedCard.appendChild(el('div','empty','Эзэмшигчгүй asset алга')); }
+  else {
+    const search = document.createElement('input'); search.type='text'; search.placeholder='Хайх...'; search.style.width='100%'; search.style.marginBottom='10px';
+    unclaimedCard.appendChild(search);
+    const listWrap = document.createElement('div'); unclaimedCard.appendChild(listWrap);
+    function drawList(filter){
+      const f = norm(filter);
+      const filtered = unclaimed.filter(a=> !f || norm(a.code).includes(f) || norm(a.name).includes(f));
+      const t = document.createElement('table');
+      t.innerHTML = '<tr><th>Код</th><th>Нэр</th><th></th></tr>' + filtered.slice(0,150).map(a=>
+        `<tr><td style="font-family:var(--mono)">${escapeHtml(a.code)}</td><td>${escapeHtml(a.name)}</td><td><button class="btn small" data-id="${a.id}">Миний</button></td></tr>`
+      ).join('');
+      listWrap.innerHTML=''; listWrap.appendChild(t);
+      t.querySelectorAll('button[data-id]').forEach(b=>{
+        b.onclick = async ()=>{
+          const item = state.fatherAssets.find(x=>x.id===b.dataset.id);
+          await dbUpdate('father_assets', item.id, { department: dept });
+          item.department = dept;
+          render();
+        };
+      });
+      if(filtered.length>150){ listWrap.appendChild(el('div','link-note',`+ дахин ${filtered.length-150} мөр, хайлтаа нарийсга`)); }
+    }
+    drawList('');
+    search.oninput = ()=>drawList(search.value);
+  }
+  app.appendChild(unclaimedCard);
+
+  const addCard = card('Дутуу Asset нэмэх', 'Жагсаалтад алга байгаа asset-ыг өөрөө нэмнэ.');
+  const addRow = document.createElement('div'); addRow.className='row';
+  const nameIn = document.createElement('input'); nameIn.type='text'; nameIn.placeholder='Asset-ийн нэр'; nameIn.style.flex='1';
+  const addBtn = document.createElement('button'); addBtn.className='btn secondary'; addBtn.textContent='Нэмэх';
+  addBtn.onclick = async ()=>{
+    const v = nameIn.value.trim(); if(!v) return;
+    const row = { id: uid(), code: '', name: v, department: dept, source: 'manual' };
+    await dbInsert('father_assets', row);
+    state.fatherAssets.push(row);
+    nameIn.value=''; render();
+  };
+  addRow.append(nameIn, addBtn);
+  addCard.appendChild(addRow);
+  app.appendChild(addCard);
+
+  const mine = state.fatherAssets.filter(a=>a.department===dept);
+  const mineCard = card(`Миний Asset-ууд (${mine.length})`, 'Тус бүрийг child asset болгож задал, дараа нь item холбо.');
+  if(mine.length===0){ mineCard.appendChild(el('div','empty','Одоогоор эзэмшдэг asset алга')); }
+  mine.forEach(fa=>{
+    mineCard.appendChild(renderFatherAssetBlock(fa, dept));
+  });
+  app.appendChild(mineCard);
+
+  // ---- Item claiming & review ----
+  app.appendChild(exemplarCard());
+
+  const unclaimedItems = state.items.filter(it=>!it.department);
+  const uiCard = card(`Эзэмшигчгүй Item (${unclaimedItems.length})`, 'Өөрт хамаарах item-ыг олж "Миний" гэж claim хий. Улаан тэмдэгтэй нь эх файлд аль хэдийн "хасах" гэж санал болгогдсон.');
+  if(unclaimedItems.length===0){ uiCard.appendChild(el('div','empty','Эзэмшигчгүй item алга')); }
+  else {
+    const search = document.createElement('input'); search.type='text'; search.placeholder='Хайх (код/нэр)...'; search.style.width='100%'; search.style.marginBottom='10px';
+    uiCard.appendChild(search);
+    const listWrap = document.createElement('div'); uiCard.appendChild(listWrap);
+    function drawItemList(filter){
+      const f = norm(filter);
+      const filtered = unclaimedItems.filter(it=> !f || norm(it.code).includes(f) || norm(it.name).includes(f));
+      const t = document.createElement('table');
+      t.innerHTML = '<tr><th>Код</th><th>Нэр</th><th>Санал (лавлагаа)</th><th>Төлөв</th><th></th></tr>' + filtered.slice(0,150).map(it=>{
+        const removeTag = it.status==='remove_pending' ? '<span class="tag dup">Хасах санал</span>' : '';
+        return `<tr><td style="font-family:var(--mono)">${escapeHtml(it.code)}</td><td>${escapeHtml(it.name)}</td><td class="link-note">${escapeHtml(it.suggested_department||'')}</td><td>${removeTag}</td><td><button class="btn small" data-id="${it.id}">Миний</button></td></tr>`;
+      }).join('');
+      listWrap.innerHTML=''; listWrap.appendChild(t);
+      t.querySelectorAll('button[data-id]').forEach(b=>{
+        b.onclick = async ()=>{
+          const item = state.items.find(x=>x.id===b.dataset.id);
+          await dbUpdate('items', item.id, { department: dept });
+          item.department = dept;
+          render();
+        };
+      });
+      if(filtered.length>150){ listWrap.appendChild(el('div','link-note',`+ дахин ${filtered.length-150} мөр, хайлтаа нарийсга`)); }
+    }
+    drawItemList('');
+    search.oninput = ()=>drawItemList(search.value);
+  }
+  app.appendChild(uiCard);
+
+  const myItems = state.items.filter(it=>it.department===dept);
+  const miCard = card(`Миний Item-үүд (${myItems.length})`, 'Category/Min/Max/UOM зөв эсэхийг шалгаад "Идэвхтэй" болгож баталгаажуул, эсвэл "Устгах" төлөвт шилжүүл.');
+  if(myItems.length===0){ miCard.appendChild(el('div','empty','Одоогоор claim хийсэн item алга')); }
+  myItems.forEach(it=>miCard.appendChild(renderItemReviewRow(it)));
+  app.appendChild(miCard);
+}
+
+function renderItemReviewRow(it){
+  const wrap = document.createElement('div');
+  wrap.style.cssText='background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:8px;';
+  const head = document.createElement('div'); head.className='flex-between';
+  head.innerHTML = `<div style="font-family:var(--mono);font-size:12px">${escapeHtml(it.code)} <span style="font-family:inherit">— ${escapeHtml(it.name)}</span></div>`;
+  wrap.appendChild(head);
+  if(it.note){ wrap.appendChild(el('div','link-note', 'Эх тайлбар: ' + it.note)); }
+
+  const fi = document.createElement('div'); fi.className='field-inline';
+  ['category','min','max','uom'].forEach(f=>{
+    const lbl = document.createElement('label'); lbl.textContent = f.toUpperCase()+':';
+    const inp = document.createElement('input'); inp.type='text'; inp.value = it[f]||'';
+    inp.onchange = async ()=>{ it[f]=inp.value; await dbUpdate('items', it.id, {[f]: inp.value}); };
+    fi.append(lbl, inp);
+  });
+  wrap.appendChild(fi);
+
+  const statusRow = document.createElement('div'); statusRow.style.marginTop='8px'; statusRow.className='row';
+  const statusLbl = document.createElement('span'); statusLbl.className='link-note'; statusLbl.textContent='Төлөв:';
+  const statusSel = document.createElement('select');
+  statusSel.innerHTML = `
+    <option value="needs_review" ${it.status==='needs_review'?'selected':''}>Шалгагдаагүй</option>
+    <option value="active" ${it.status==='active'?'selected':''}>Идэвхтэй (баталгаажсан)</option>
+    <option value="remove_pending" ${it.status==='remove_pending'?'selected':''}>Хасах санал</option>
+    <option value="removed" ${it.status==='removed'?'selected':''}>Устгах (баталгаажсан)</option>`;
+  statusSel.onchange = async ()=>{
+    const newStatus = statusSel.value;
+    if(newStatus==='active'){
+      const missing = ['category','min','max','uom'].filter(f=>!(it[f]&&it[f].toString().trim()));
+      if(missing.length){
+        toast('Идэвхтэй болгохын өмнө дараах талбарыг бөглөнө үү: ' + missing.join(', '));
+        statusSel.value = it.status;
+        return;
+      }
+    }
+    it.status = newStatus;
+    await dbUpdate('items', it.id, {status: newStatus});
+    render();
+  };
+  statusRow.append(statusLbl, statusSel);
+  wrap.appendChild(statusRow);
+  return wrap;
+}
+
+function renderFatherAssetBlock(fa, dept){
+  const block = document.createElement('div'); block.className='child-block';
+  const head = document.createElement('div'); head.className='flex-between';
+  head.innerHTML = `<div><strong>${escapeHtml(fa.name)}</strong> ${fa.code?`<span class="link-note">(${escapeHtml(fa.code)})</span>`:''}</div>`;
+  const unclaimBtn = document.createElement('button'); unclaimBtn.className='btn ghost small'; unclaimBtn.textContent='Буцаах';
+  unclaimBtn.onclick = async ()=>{ await dbUpdate('father_assets', fa.id, {department:null}); fa.department=null; render(); };
+  head.appendChild(unclaimBtn);
+  block.appendChild(head);
+
+  const children = state.childAssets.filter(c=>c.father_id===fa.id);
+  const childList = document.createElement('div'); childList.style.marginTop='8px';
+  children.forEach(c=>childList.appendChild(renderChildAsset(c)));
+  block.appendChild(childList);
+
+  const addRow = document.createElement('div'); addRow.className='row'; addRow.style.marginTop='8px';
+  const cName = document.createElement('input'); cName.type='text'; cName.placeholder='Child asset нэр'; cName.style.flex='1';
+  const cQty = document.createElement('input'); cQty.type='number'; cQty.placeholder='тоо ш'; cQty.style.width='80px';
+  const cBtn = document.createElement('button'); cBtn.className='btn small'; cBtn.textContent='+ Child нэмэх';
+  cBtn.onclick = async ()=>{
+    const nm = cName.value.trim(); if(!nm) return;
+    const row = { id: uid(), father_id: fa.id, name: nm, qty: cQty.value||'', department: dept };
+    await dbInsert('child_assets', row);
+    state.childAssets.push(row);
+    render();
+  };
+  addRow.append(cName, cQty, cBtn);
+  block.appendChild(addRow);
+  return block;
+}
+
+function renderChildAsset(c){
+  const wrap = document.createElement('div');
+  wrap.style.cssText='background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:10px;margin-bottom:8px;';
+  const head = document.createElement('div'); head.className='flex-between';
+  head.innerHTML = `<div>▸ <strong>${escapeHtml(c.name)}</strong> ${c.qty?`<span class="link-note">x${escapeHtml(c.qty)}</span>`:''}</div>`;
+  const rm = document.createElement('button'); rm.className='btn ghost small'; rm.textContent='Устгах';
+  rm.onclick = async ()=>{
+    await dbDelete('child_assets', c.id); // cascades links via FK
+    state.childAssets = state.childAssets.filter(x=>x.id!==c.id);
+    state.links = state.links.filter(l=>l.child_asset_id!==c.id);
+    render();
+  };
+  head.appendChild(rm);
+  wrap.appendChild(head);
+
+  const links = state.links.filter(l=>l.child_asset_id===c.id);
+  links.forEach(l=>wrap.appendChild(renderItemLink(l)));
+
+  const searchWrap = document.createElement('div'); searchWrap.className='search-box'; searchWrap.style.marginTop='6px';
+  const sIn = document.createElement('input'); sIn.type='text'; sIn.placeholder='Item хайж холбох (код/нэр)...'; sIn.style.width='100%';
+  const results = document.createElement('div'); results.className='search-results'; results.style.display='none';
+  sIn.oninput = ()=>{
+    const f = norm(sIn.value);
+    if(!f){ results.style.display='none'; return; }
+    const matches = state.items.filter(it=>it.status!=='removed' && (norm(it.code).includes(f)||norm(it.name).includes(f))).slice(0,20);
+    results.innerHTML='';
+    if(matches.length===0){ results.innerHTML='<div>Олдсонгүй</div>'; }
+    matches.forEach(it=>{
+      const d = document.createElement('div');
+      d.textContent = `${it.code} — ${it.name}`;
+      d.onclick = async ()=>{
+        const row = { id: uid(), child_asset_id: c.id, item_id: it.id, qty:'', verified:false, corr_category:'', corr_min:'', corr_max:'', corr_uom:'' };
+        await dbInsert('links', row);
+        state.links.push(row);
+        sIn.value=''; results.style.display='none'; render();
+      };
+      results.appendChild(d);
+    });
+    results.style.display='block';
+  };
+  searchWrap.append(sIn, results);
+  wrap.appendChild(searchWrap);
+  return wrap;
+}
+
+function renderItemLink(l){
+  const it = state.items.find(x=>x.id===l.item_id);
+  const wrap = document.createElement('div');
+  wrap.style.cssText='background:var(--panel2);border-radius:6px;padding:8px 10px;margin:6px 0;';
+  if(!it){ wrap.innerHTML = '<span class="link-note">Item олдсонгүй</span>'; return wrap; }
+  const head = document.createElement('div'); head.className='flex-between';
+  head.innerHTML = `<div style="font-family:var(--mono);font-size:12px">${escapeHtml(it.code)} <span style="font-family:inherit">— ${escapeHtml(it.name)}</span></div>`;
+  const rmBtn = document.createElement('button'); rmBtn.className='btn ghost small'; rmBtn.textContent='×';
+  rmBtn.onclick = async ()=>{ await dbDelete('links', l.id); state.links = state.links.filter(x=>x.id!==l.id); render(); };
+  head.appendChild(rmBtn);
+  wrap.appendChild(head);
+
+  const fi = document.createElement('div'); fi.className='field-inline';
+  const qtyLbl = document.createElement('label'); qtyLbl.textContent='Тоо ш:';
+  const qtyIn = document.createElement('input'); qtyIn.type='number'; qtyIn.value=l.qty||'';
+  qtyIn.onchange = async ()=>{ l.qty = qtyIn.value; await dbUpdate('links', l.id, {qty:l.qty}); };
+  fi.append(qtyLbl, qtyIn);
+
+  const fieldMap = { category:'corr_category', min:'corr_min', max:'corr_max', uom:'corr_uom' };
+  Object.entries(fieldMap).forEach(([label, dbField])=>{
+    const lbl = document.createElement('label'); lbl.textContent = label.toUpperCase()+':';
+    const inp = document.createElement('input'); inp.type='text';
+    inp.value = l[dbField] || it[label] || '';
+    inp.onchange = async ()=>{ l[dbField] = inp.value; await dbUpdate('links', l.id, {[dbField]: inp.value}); };
+    fi.append(lbl, inp);
+  });
+  wrap.appendChild(fi);
+
+  const verifyRow = document.createElement('div'); verifyRow.style.marginTop='6px';
+  const chk = document.createElement('label'); chk.style.fontSize='12px'; chk.style.cursor='pointer';
+  const cb = document.createElement('input'); cb.type='checkbox'; cb.checked=!!l.verified; cb.style.marginRight='6px';
+  cb.onchange = async ()=>{ l.verified = cb.checked; await dbUpdate('links', l.id, {verified: l.verified}); render(); };
+  chk.append(cb, document.createTextNode('Менежерээр баталгаажсан'));
+  verifyRow.appendChild(chk);
+  wrap.appendChild(verifyRow);
+  return wrap;
+}
+
+// ================= MATRIX TAB =================
+let matrixSelectedChildIds = [];
+let matrixSelectedItemIds = [];
+
+function renderMatrix(app){
+  const sel = card('Алба нэгжээ сонгоно уу', 'Ижил төрлийн олон child asset-д зэрэг item тоо ширхэг оруулах горим.');
+  const row = document.createElement('div'); row.className='row';
+  const s = document.createElement('select'); s.style.minWidth='260px';
+  s.innerHTML = '<option value="">-- сонгох --</option>' + state.departments.map(d=>`<option ${state.currentDept===d.name?'selected':''} value="${escapeHtml(d.name)}">${escapeHtml(d.name)}</option>`).join('');
+  s.onchange = ()=>{ state.currentDept = s.value || null; matrixSelectedChildIds=[]; matrixSelectedItemIds=[]; render(); };
+  row.appendChild(s);
+  sel.appendChild(row);
+  app.appendChild(sel);
+
+  if(!state.currentDept){
+    app.appendChild(el('div','empty','Ажиллах алба нэгжээ сонгоно уу'));
+    return;
+  }
+  const dept = state.currentDept;
+  const myChildren = state.childAssets.filter(c=>c.department===dept);
+
+  // Step 1: pick child assets (columns)
+  const colCard = card('1. Ижил төрлийн Child Asset-уудаа сонго (баганууд болно)', '');
+  if(myChildren.length===0){ colCard.appendChild(el('div','empty','Эхлээд "Алба нэгжийн ажил" табд child asset задлана уу')); app.appendChild(colCard); return; }
+  const colGrid = document.createElement('div'); colGrid.style.cssText='display:flex;flex-wrap:wrap;gap:6px;';
+  myChildren.forEach(c=>{
+    const lbl = document.createElement('label');
+    lbl.style.cssText='display:flex;align-items:center;gap:5px;background:var(--panel2);border:1px solid var(--line);padding:5px 10px;border-radius:6px;font-size:12px;cursor:pointer;';
+    const cb = document.createElement('input'); cb.type='checkbox'; cb.checked = matrixSelectedChildIds.includes(c.id);
+    cb.onchange = ()=>{
+      if(cb.checked) matrixSelectedChildIds.push(c.id);
+      else matrixSelectedChildIds = matrixSelectedChildIds.filter(x=>x!==c.id);
+      render();
+    };
+    lbl.append(cb, document.createTextNode(c.name));
+    colGrid.appendChild(lbl);
+  });
+  colCard.appendChild(colGrid);
+  app.appendChild(colCard);
+
+  if(matrixSelectedChildIds.length===0){
+    app.appendChild(el('div','empty','Дор хаяж 1 child asset сонгоно уу'));
+    return;
+  }
+
+  // Step 2: pick items (rows) via search
+  const itemCard = card('2. Item-үүдээ хайж мөр болгон нэм', '');
+  const searchWrap = document.createElement('div'); searchWrap.className='search-box';
+  const sIn = document.createElement('input'); sIn.type='text'; sIn.placeholder='Item хайх (код/нэр)...'; sIn.style.width='100%';
+  const results = document.createElement('div'); results.className='search-results'; results.style.display='none';
+  sIn.oninput = ()=>{
+    const f = norm(sIn.value);
+    if(!f){ results.style.display='none'; return; }
+    const matches = state.items.filter(it=>it.status!=='removed' && (norm(it.code).includes(f)||norm(it.name).includes(f))).slice(0,20);
+    results.innerHTML='';
+    if(matches.length===0){ results.innerHTML='<div>Олдсонгүй</div>'; }
+    matches.forEach(it=>{
+      const d = document.createElement('div');
+      d.textContent = `${it.code} — ${it.name}`;
+      d.onclick = ()=>{
+        if(!matrixSelectedItemIds.includes(it.id)) matrixSelectedItemIds.push(it.id);
+        sIn.value=''; results.style.display='none'; render();
+      };
+      results.appendChild(d);
+    });
+    results.style.display='block';
+  };
+  searchWrap.append(sIn, results);
+  itemCard.appendChild(searchWrap);
+  app.appendChild(itemCard);
+
+  if(matrixSelectedItemIds.length===0){
+    app.appendChild(el('div','empty','Дор хаяж 1 item хайж нэмнэ үү'));
+    return;
+  }
+
+  // Step 3: matrix grid
+  const gridCard = card('3. Тоо ширхэгээ бөглөнө үү', 'Хоосон = холбоогүй. Утга оруулбал автоматаар хадгална.');
+  const table = document.createElement('table');
+  const selectedChildren = myChildren.filter(c=>matrixSelectedChildIds.includes(c.id));
+  const selectedItems = state.items.filter(it=>matrixSelectedItemIds.includes(it.id));
+
+  let thead = '<tr><th>Item</th>' + selectedChildren.map(c=>`<th>${escapeHtml(c.name)}</th>`).join('') + '<th></th></tr>';
+  table.innerHTML = thead;
+  selectedItems.forEach(it=>{
+    const tr = document.createElement('tr');
+    const tdName = document.createElement('td');
+    tdName.innerHTML = `<span style="font-family:var(--mono);font-size:11px">${escapeHtml(it.code)}</span><br>${escapeHtml(it.name)}`;
+    tr.appendChild(tdName);
+    selectedChildren.forEach(c=>{
+      const td = document.createElement('td');
+      const existing = state.links.find(l=>l.child_asset_id===c.id && l.item_id===it.id);
+      const inp = document.createElement('input');
+      inp.type = 'number'; inp.style.width='60px';
+      inp.value = existing ? (existing.qty||'') : '';
+      inp.placeholder = '—';
+      inp.onchange = async ()=>{
+        const val = inp.value.trim();
+        let link = state.links.find(l=>l.child_asset_id===c.id && l.item_id===it.id);
+        if(!val){
+          if(link){ await dbDelete('links', link.id); state.links = state.links.filter(x=>x.id!==link.id); }
+          return;
+        }
+        if(link){
+          link.qty = val;
+          await dbUpdate('links', link.id, {qty: val});
+        } else {
+          const row = { id: uid(), child_asset_id: c.id, item_id: it.id, qty: val, verified:false, corr_category:'', corr_min:'', corr_max:'', corr_uom:'' };
+          await dbInsert('links', row);
+          state.links.push(row);
+        }
+      };
+      td.appendChild(inp);
+      tr.appendChild(td);
+    });
+    const tdRm = document.createElement('td');
+    const rmBtn = document.createElement('button'); rmBtn.className='btn ghost small'; rmBtn.textContent='×';
+    rmBtn.title = 'Мөрнөөс хасах (холбоог устгахгүй)';
+    rmBtn.onclick = ()=>{ matrixSelectedItemIds = matrixSelectedItemIds.filter(x=>x!==it.id); render(); };
+    tdRm.appendChild(rmBtn);
+    tr.appendChild(tdRm);
+    table.appendChild(tr);
+  });
+  gridCard.appendChild(table);
+  app.appendChild(gridCard);
+}
+
+// ================= EXPORT TAB =================
+function renderExport(app){
+  const c1 = card('Asset жагсаалт экспорт', 'Father + Child asset-ын бүрэн бүтэц.');
+  const b1 = document.createElement('button'); b1.className='btn'; b1.textContent='CSV татах';
+  b1.onclick = ()=>{
+    const rows = [['Father Code','Father Name','Department','Child Asset','Child Qty']];
+    state.fatherAssets.forEach(fa=>{
+      const children = state.childAssets.filter(c=>c.father_id===fa.id);
+      if(children.length===0){ rows.push([fa.code, fa.name, fa.department||'', '', '']); }
+      children.forEach(c=> rows.push([fa.code, fa.name, fa.department||'', c.name, c.qty||'']));
+    });
+    downloadCsv(rows, 'asset-structure.csv');
+  };
+  c1.appendChild(b1);
+  app.appendChild(c1);
+
+  const c2 = card('Item холболт экспорт', 'Child asset тус бүрт хамаарах item, тоо ширхэг, баталгаажсан категори/min/max/UOM. Зөвхөн "Идэвхтэй" төлөвтэй item орно (Устгах/Хасах санал орохгүй).');
+  const b2 = document.createElement('button'); b2.className='btn'; b2.textContent='CSV татах';
+  b2.onclick = ()=>{
+    const rows = [['Department','Father Asset','Child Asset','Item Code','Item Name','Category','Min','Max','UOM','Link Qty','Verified']];
+    state.links.forEach(l=>{
+      const c = state.childAssets.find(x=>x.id===l.child_asset_id);
+      const fa = c ? state.fatherAssets.find(x=>x.id===c.father_id) : null;
+      const it = state.items.find(x=>x.id===l.item_id);
+      if(!c||!it) return;
+      if(it.status==='removed' || it.status==='remove_pending') return;
+      rows.push([fa?fa.department||'':'', fa?fa.name:'', c.name, it.code, it.name,
+        l.corr_category||it.category, l.corr_min||it.min, l.corr_max||it.max, l.corr_uom||it.uom,
+        l.qty||'', l.verified?'Yes':'No']);
+    });
+    downloadCsv(rows, 'item-links.csv');
+  };
+  c2.appendChild(b2);
+  app.appendChild(c2);
+
+  const c2b = card('Item Master эцсийн жагсаалт', 'Бүх item, тэдгээрийн эцсийн төлөв (Идэвхтэй/Устгах/Шалгагдаагүй) — Oracle-д ачаалахын өмнө "Шалгагдаагүй" мөр байхгүй эсэхийг шалгана уу.');
+  const b2b = document.createElement('button'); b2b.className='btn'; b2b.textContent='CSV татах';
+  b2b.onclick = ()=>{
+    const rows = [['Item Code','Item Name','Category','Min','Max','UOM','Department','Status','Note']];
+    const statusLabel = {active:'Идэвхтэй', removed:'Устгасан', remove_pending:'Хасах санал', needs_review:'Шалгагдаагүй'};
+    state.items.forEach(it=>{
+      rows.push([it.code, it.name, it.category, it.min, it.max, it.uom, it.department||'', statusLabel[it.status]||it.status, it.note||'']);
+    });
+    downloadCsv(rows, 'item-master-final.csv');
+  };
+  c2b.appendChild(b2b);
+  app.appendChild(c2b);
+
+  const c3 = card('Давхардсан item тайлан', 'Ижил нэртэй боловч өөр код-той item-ийн бүлгүүд.');
+  const b3 = document.createElement('button'); b3.className='btn secondary'; b3.textContent='CSV татах';
+  b3.onclick = ()=>{
+    const groups = {};
+    state.items.forEach(it=>{ const k = norm(it.name); (groups[k]=groups[k]||[]).push(it); });
+    const rows = [['Нэр','Кодууд','Тоо']];
+    Object.values(groups).filter(g=>g.length>1).forEach(g=> rows.push([g[0].name, g.map(x=>x.code).join(' | '), g.length]));
+    downloadCsv(rows, 'duplicate-items.csv');
+  };
+  c3.appendChild(b3);
+  app.appendChild(c3);
+}
+
+function downloadCsv(rows, filename){
+  const csv = rows.map(r=>r.map(v=>`"${(v||'').toString().replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob = new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href=url; a.download=filename; a.click();
+  URL.revokeObjectURL(url);
+}
+
+function card(title, desc){
+  const c = document.createElement('div'); c.className='card';
+  const h = document.createElement('h2'); h.textContent = title; c.appendChild(h);
+  if(desc){ const d = document.createElement('div'); d.className='desc'; d.textContent = desc; c.appendChild(d); }
+  return c;
+}
+function el(tag, cls, text){ const e = document.createElement(tag); e.className=cls; e.textContent=text; return e; }
+function escapeHtml(s){ return (s||'').toString().replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+
+loadAll();
+</script>
+</body>
+</html>
