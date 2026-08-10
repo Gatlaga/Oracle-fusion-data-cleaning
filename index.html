@@ -81,7 +81,8 @@
 <div id="modalRoot"></div>
 <div id="toastRoot"></div>
 
-<script>
+<script src="unspsc.js"></script>
+  <script>
 /* =========================================================
    SUPABASE ТОХИРГОО
    Доорх хоёр утгыг Supabase Dashboard -> Project Settings -> API-с аваад бичнэ.
@@ -105,6 +106,39 @@ try{
 
 const uid = () => Math.random().toString(36).slice(2,10);
 const norm = s => (s||'').toString().trim().toLowerCase().replace(/\s+/g,' ');
+
+// UNSPSC category lookup from item code (first 8 digits)
+function getUnspsc(itemCode){
+  if(!itemCode || typeof UNSPSC === 'undefined') return null;
+  const code = itemCode.toString().trim().replace(/\D/g,'');
+  if(code.length < 8) return null;
+  const com8 = code.slice(0,8);
+  const cls6 = com8.slice(0,6);
+  const fam4 = com8.slice(0,4);
+  const seg2 = com8.slice(0,2);
+  return {
+    segment: UNSPSC.s[seg2] || '',
+    family:  UNSPSC.f[fam4] || '',
+    cls:     UNSPSC.c[cls6] || '',
+    commodity: UNSPSC.com[com8] || '',
+    codes: { seg2, fam4, cls6, com8 }
+  };
+}
+
+function unspscBadge(itemCode){
+  const u = getUnspsc(itemCode);
+  if(!u || !u.commodity) return '';
+  return `<div style="margin-top:4px;font-size:11px;background:var(--panel);padding:4px 8px;border-radius:4px;border-left:3px solid var(--accent2)">
+    <span style="color:var(--sub)">UNSPSC: </span>
+    <span style="color:var(--sub)">${escapeHtml(u.segment)}</span>
+    <span style="color:var(--sub)"> › </span>
+    <span style="color:var(--sub)">${escapeHtml(u.family)}</span>
+    <span style="color:var(--sub)"> › </span>
+    <span style="color:var(--sub)">${escapeHtml(u.cls)}</span>
+    <span style="color:var(--sub)"> › </span>
+    <span style="color:var(--accent2);font-weight:600">${escapeHtml(u.commodity)}</span>
+  </div>`;
+}
 
 const ADMIN_PASSWORD = "Admin2026#"; // Гана та энэ нууц үгээр Ерөнхий/Тохиргоо, бүх датаг удирдана
 
@@ -530,31 +564,46 @@ function openColumnMapModal(kind, cols, rows){
     ? [
         ['code','Код (Asset Number)'],
         ['name','Нэр (Asset Description)'],
-        ['assetGroup','Asset Group (заавал биш)'],
-        ['assetCategory','Asset Category (заавал биш)'],
-        ['processArea','Process Area (заавал биш)'],
+        ['assetGroup','Asset Group'],
+        ['assetGroupDesc','Asset Group Description'],
+        ['assetCategory','Asset Category'],
+        ['processArea','Process Area'],
         ['department','Санал болгож буй алба нэгж → автоматаар хуваарилна'],
       ]
     : [
-        ['code','Код'],['name','Нэр'],['category','Категори'],
-        ['min','Min'],['max','Max'],['uom','UOM'],
-        ['department','Алба нэгж (лавлагаа, заавал биш)'],
+        ['code','Код (Item Code)'],
+        ['name','Анхны нэр'],
+        ['revisedName','Зассан нэр (заавал биш)'],
+        ['spec','Үзүүлэлт / Spec (заавал биш)'],
+        ['equipment','Тоноглол / Equipment (заавал биш)'],
+        ['uom','UOM'],
+        ['min','Min Qty'],
+        ['max','Max Qty'],
+        ['criticality','Чухал түвшин (заавал биш)'],
+        ['department','Санал болгож буй алба нэгж → автоматаар хуваарилна'],
         ['note','Тайлбар (заавал биш)'],
       ];
   const bg = document.createElement('div'); bg.className='modal-bg';
   const modal = document.createElement('div'); modal.className='modal';
+  modal.style.maxHeight='80vh'; modal.style.overflowY='auto';
   modal.innerHTML = `<h3>${kind==='father'?'Father Asset':'Item'} багана харгалзуулах</h3>
     <div class="desc">CSV-ийн ямар багана юу болохыг сонгоно уу. (${rows.length} мөр)</div>`;
   const selects = {};
-  // Auto-guess mapping
   const guessMap = {
-    code: ['asset number','number','код','code'],
-    name: ['asset description','description','нэр','name','тайлбар'],
-    assetGroup: ['asset group','group'],
+    code: ['asset number','item code','number','код','code'],
+    name: ['asset description','анхны нэр','description','нэр','name'],
+    revisedName: ['зассан нэр','revised','corrected'],
+    spec: ['үзүүлэлт','spec','parameter','параметр'],
+    equipment: ['тоноглол','equipment','asset','хамаарах'],
+    assetGroup: ['asset group','group','бүлэг'],
+    assetGroupDesc: ['group description','group desc','бүлгийн тайлбар'],
     assetCategory: ['asset category','category','ангилал'],
-    processArea: ['process area','process','байршил'],
-    department: ['санал болгож','алба нэгж','department','хариуцах'],
-    min: ['min'], max: ['max'], uom: ['uom'],
+    processArea: ['process area','process','байршил','талбай'],
+    department: ['санал болгож','алба нэгж','department','хариуцах','хуваарилах'],
+    min: ['min qty','min','хамгийн бага'],
+    max: ['max qty','max','хамгийн их'],
+    uom: ['uom','unit','нэгж'],
+    criticality: ['чухал','criticality','priority','зэрэглэл'],
     note: ['тайлбар','note','comment'],
   };
   fields.forEach(([key,label])=>{
@@ -593,25 +642,24 @@ function detectStatus(note){
 }
 
 async function runImport(kind, mapping, rows){
-  const BATCH = 500;
+  const BATCH = 300;
   if(kind==='father'){
     const existingCodes = new Set(state.fatherAssets.map(a=>a.code));
-    // valid dept names for auto-assign
-    const validDepts = new Set(state.departments.map(d=>norm(d.name)));
     const toInsert = [];
     rows.forEach(r=>{
       const code = (r[mapping.code]||'').toString().trim();
       const name = (r[mapping.name]||'').toString().trim();
       if(!code || existingCodes.has(code)) return;
-      // Auto-assign department from CSV
       const suggestedRaw = mapping.department ? (r[mapping.department]||'').toString().trim() : '';
       const matchedDept = state.departments.find(d=>norm(d.name)===norm(suggestedRaw));
-      const dept = matchedDept ? matchedDept.name : null;
       toInsert.push({
         id: uid(), code, name,
-        department: dept,
+        asset_group: mapping.assetGroup ? (r[mapping.assetGroup]||'').toString().trim() : '',
+        asset_group_desc: mapping.assetGroupDesc ? (r[mapping.assetGroupDesc]||'').toString().trim() : '',
+        asset_category: mapping.assetCategory ? (r[mapping.assetCategory]||'').toString().trim() : '',
+        process_area: mapping.processArea ? (r[mapping.processArea]||'').toString().trim() : '',
+        department: matchedDept ? matchedDept.name : null,
         source: 'import',
-        // store extra fields in name for now
       });
       existingCodes.add(code);
     });
@@ -624,7 +672,8 @@ async function runImport(kind, mapping, rows){
       imported+=chunk.length;
     }
     const assigned = toInsert.filter(x=>x.department).length;
-    toast(`${imported} father asset импортлогдлоо (${assigned} нь алба нэгжид хуваарилагдсан)`);
+    const unassigned = toInsert.length - assigned;
+    toast(`${imported} father asset импортлогдлоо (${assigned} хуваарилагдсан, ${unassigned} хуваарилагдаагүй)`);
   } else {
     const existingCodes = new Set(state.items.map(i=>i.code));
     const toInsert = [];
@@ -633,25 +682,35 @@ async function runImport(kind, mapping, rows){
       const name = (r[mapping.name]||'').toString().trim();
       if(!code || existingCodes.has(code)) return;
       const note = mapping.note ? (r[mapping.note]||'').toString().trim() : '';
-      const suggestedDept = mapping.department ? (r[mapping.department]||'').toString().trim() : '';
+      const suggestedRaw = mapping.department ? (r[mapping.department]||'').toString().trim() : '';
+      const matchedDept = state.departments.find(d=>norm(d.name)===norm(suggestedRaw));
       toInsert.push({
         id: uid(), code, name,
-        category: mapping.category ? (r[mapping.category]||'').toString().trim() : '',
+        revised_name: mapping.revisedName ? (r[mapping.revisedName]||'').toString().trim() : '',
+        spec: mapping.spec ? (r[mapping.spec]||'').toString().trim() : '',
+        equipment: mapping.equipment ? (r[mapping.equipment]||'').toString().trim() : '',
+        uom: mapping.uom ? (r[mapping.uom]||'').toString().trim() : '',
         min: mapping.min ? (r[mapping.min]||'').toString().trim() : '',
         max: mapping.max ? (r[mapping.max]||'').toString().trim() : '',
-        uom: mapping.uom ? (r[mapping.uom]||'').toString().trim() : '',
-        department: null,
-        suggested_department: suggestedDept,
+        criticality: mapping.criticality ? (r[mapping.criticality]||'').toString().trim() : '',
+        department: matchedDept ? matchedDept.name : null,
+        suggested_department: suggestedRaw,
         status: detectStatus(note),
         note: note,
+        transaction_type: 'Create',
+        org_code: 'MMC',
+        item_status: 'Active',
+        source_system: 'Legacy',
       });
       existingCodes.add(code);
     });
+    let imported=0;
     for(let i=0;i<toInsert.length;i+=BATCH){
       const chunk = toInsert.slice(i,i+BATCH);
       const { error } = await sb.from('items').insert(chunk);
       if(error){ toast('Импортын алдаа: '+error.message); break; }
       state.items.push(...chunk);
+      imported+=chunk.length;
     }
     toast(`${toInsert.length} item импортлогдлоо`);
   }
@@ -742,50 +801,76 @@ function renderAssetTab(app){
   const dept = state.currentDept;
 
   if(session.role==='manager'){
-    const b = card(`Таны алба нэгж: ${dept} — Asset шалгах`, 'Доорх дарааллаар: (1) өөрийн asset-аа claim хий, (2) дутуу бол нэм, (3) child asset болгож задал. Тайлбар "Заавар" табд.');
+    const b = card(`Таны алба нэгж: ${dept} — Asset шалгах`, 'Доорх дарааллаар: (1) өөрийн asset-аа claim хий, (2) дутуу бол нэм, (3) child asset болгож задал.');
     b.appendChild(myProgressBanner(dept));
     app.appendChild(b);
   }
-
   app.appendChild(mySummaryCard(dept));
 
+  // ---- Эзэмшигчгүй assets ----
   const unclaimed = state.fatherAssets.filter(a=>!a.department);
-  const unclaimedCard = card(`1. Эзэмшигчгүй Father Asset (${unclaimed.length})`, 'Өөрт хамаарах asset-ыг олж "Манай албаных" гэж тэмдэглэ.');
-  if(unclaimed.length===0){ unclaimedCard.appendChild(el('div','empty','Эзэмшигчгүй asset алга')); }
-  else {
-    const search = document.createElement('input'); search.type='text'; search.placeholder='Хайх...'; search.style.width='100%'; search.style.marginBottom='10px';
-    unclaimedCard.appendChild(search);
+  if(unclaimed.length>0){
+    const unclaimedCard = card(`1. Эзэмшигчгүй Father Asset (${unclaimed.length})`, 'Өөрт хамаарах asset-ыг хайж "Манай албаных" дарж ав. Asset Group, Category, Process Area-г ашиглан шүүнэ.');
+
+    // Filter bar
+    const filterBar = document.createElement('div'); filterBar.style.cssText='display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;';
+    const searchIn = document.createElement('input'); searchIn.type='text'; searchIn.placeholder='Код/Нэр хайх...'; searchIn.style.flex='1';
+    const allGroups=['-- Бүх Group --',...new Set(unclaimed.map(a=>a.asset_group||'').filter(Boolean))];
+    const allCats=['-- Бүх Category --',...new Set(unclaimed.map(a=>a.asset_category||'').filter(Boolean))];
+    const allAreas=['-- Бүх Process Area --',...new Set(unclaimed.map(a=>a.process_area||'').filter(Boolean))];
+    const grpSel = document.createElement('select');
+    grpSel.innerHTML = allGroups.map(g=>`<option>${escapeHtml(g)}</option>`).join('');
+    const catSel = document.createElement('select');
+    catSel.innerHTML = allCats.map(g=>`<option>${escapeHtml(g)}</option>`).join('');
+    const areaSel = document.createElement('select');
+    areaSel.innerHTML = allAreas.map(g=>`<option>${escapeHtml(g)}</option>`).join('');
+    filterBar.append(searchIn, grpSel, catSel, areaSel);
+    unclaimedCard.appendChild(filterBar);
+
     const listWrap = document.createElement('div'); unclaimedCard.appendChild(listWrap);
-    function drawList(filter){
-      const f = norm(filter);
-      const filtered = unclaimed.filter(a=> !f || norm(a.code).includes(f) || norm(a.name).includes(f));
+    function drawUnclaimed(){
+      const f=norm(searchIn.value);
+      const grp=grpSel.value; const cat=catSel.value; const area=areaSel.value;
+      const filtered = unclaimed.filter(a=>{
+        if(f && !norm(a.code).includes(f) && !norm(a.name).includes(f)) return false;
+        if(grp && !grp.includes('Бүх') && a.asset_group!==grp) return false;
+        if(cat && !cat.includes('Бүх') && a.asset_category!==cat) return false;
+        if(area && !area.includes('Бүх') && a.process_area!==area) return false;
+        return true;
+      });
       const t = document.createElement('table');
-      t.innerHTML = '<tr><th>Код</th><th>Нэр</th><th></th></tr>' + filtered.slice(0,150).map(a=>
-        `<tr><td style="font-family:var(--mono)">${escapeHtml(a.code)}</td><td>${escapeHtml(a.name)}</td><td><button class="btn small" data-id="${a.id}">Манай албаных</button></td></tr>`
-      ).join('');
+      t.innerHTML = '<tr><th>Код</th><th>Нэр</th><th>Asset Group</th><th>Category</th><th>Process Area</th><th></th></tr>' +
+        filtered.slice(0,200).map(a=>`<tr>
+          <td style="font-family:var(--mono);white-space:nowrap">${escapeHtml(a.code)}</td>
+          <td>${escapeHtml(a.name)}</td>
+          <td class="link-note">${escapeHtml(a.asset_group||'')}</td>
+          <td class="link-note">${escapeHtml(a.asset_category||'')}</td>
+          <td class="link-note">${escapeHtml(a.process_area||'')}</td>
+          <td><button class="btn small" data-id="${a.id}">Манай албаных</button></td>
+        </tr>`).join('');
       listWrap.innerHTML=''; listWrap.appendChild(t);
       t.querySelectorAll('button[data-id]').forEach(b=>{
         b.onclick = async ()=>{
-          const item = state.fatherAssets.find(x=>x.id===b.dataset.id);
-          await dbUpdate('father_assets', item.id, { department: dept });
-          item.department = dept;
-          render();
+          const it = state.fatherAssets.find(x=>x.id===b.dataset.id);
+          await dbUpdate('father_assets', it.id, {department:dept});
+          it.department=dept; render();
         };
       });
-      if(filtered.length>150){ listWrap.appendChild(el('div','link-note',`+ дахин ${filtered.length-150} мөр, хайлтаа нарийсга`)); }
+      if(filtered.length>200) listWrap.appendChild(el('div','link-note',`+ дахин ${filtered.length-200} мөр, хайлтаа нарийсга`));
     }
-    drawList('');
-    search.oninput = ()=>drawList(search.value);
+    drawUnclaimed();
+    [searchIn,grpSel,catSel,areaSel].forEach(el2=>{ el2.oninput=drawUnclaimed; el2.onchange=drawUnclaimed; });
+    app.appendChild(unclaimedCard);
   }
-  app.appendChild(unclaimedCard);
 
+  // ---- Дутуу нэмэх ----
   const addCard = card('2. Дутуу Asset нэмэх', 'Жагсаалтад алга байгаа asset-ыг өөрөө нэмнэ.');
   const addRow = document.createElement('div'); addRow.className='row';
   const nameIn = document.createElement('input'); nameIn.type='text'; nameIn.placeholder='Asset-ийн нэр'; nameIn.style.flex='1';
   const addBtn = document.createElement('button'); addBtn.className='btn secondary'; addBtn.textContent='Нэмэх';
   addBtn.onclick = async ()=>{
     const v = nameIn.value.trim(); if(!v) return;
-    const row = { id: uid(), code: '', name: v, department: dept, source: 'manual' };
+    const row = { id: uid(), code:'', name:v, department:dept, source:'manual' };
     await dbInsert('father_assets', row);
     state.fatherAssets.push(row);
     nameIn.value=''; render();
@@ -794,12 +879,26 @@ function renderAssetTab(app){
   addCard.appendChild(addRow);
   app.appendChild(addCard);
 
+  // ---- Миний asset-ууд (detail + child задлах) ----
   const mine = state.fatherAssets.filter(a=>a.department===dept);
-  const mineCard = card(`3. Миний Asset-ууд → Child asset болгож задлах (${mine.length})`, 'Asset тус бүрийг дарж нээгээд, бодит эд ангиудад нь задал. Дүрэм: "Заавар" таб.');
+  const mineCard = card(`3. Миний Asset-ууд (${mine.length}) → Child asset болгож задлах`, 'Asset бүрийг дарж нээгээд бодит эд ангиудад задал. Дэлгэрэнгүй мэдээлэл харна уу.');
   if(mine.length===0){ mineCard.appendChild(el('div','empty','Одоогоор эзэмшдэг asset алга')); }
-  mine.forEach(fa=>{
-    mineCard.appendChild(renderFatherAssetBlock(fa, dept));
-  });
+
+  // Filter for mine
+  if(mine.length>5){
+    const mf = document.createElement('input'); mf.type='text'; mf.placeholder='Хайх...'; mf.style.cssText='width:100%;margin-bottom:10px;';
+    mineCard.appendChild(mf);
+    const mineWrap = document.createElement('div'); mineCard.appendChild(mineWrap);
+    function drawMine(){
+      const f=norm(mf.value);
+      const filtered=mine.filter(a=>!f||norm(a.code).includes(f)||norm(a.name).includes(f));
+      mineWrap.innerHTML='';
+      filtered.forEach(fa=>mineWrap.appendChild(renderFatherAssetBlock(fa,dept)));
+    }
+    drawMine(); mf.oninput=drawMine;
+  } else {
+    mine.forEach(fa=>mineCard.appendChild(renderFatherAssetBlock(fa,dept)));
+  }
   app.appendChild(mineCard);
 }
 
@@ -809,51 +908,156 @@ function renderItemTab(app){
   const dept = state.currentDept;
 
   if(session.role==='manager'){
-    const b = card(`Таны алба нэгж: ${dept} — Item (Spare parts) шалгах`, '(1) өөрийн item-ээ claim хий, (2) Category/Min/Max/UOM шалгаж "Идэвхтэй" болго, (3) хэрэггүйг "Хасах"-д тэмдэглэ.');
+    const b = card(`Таны алба нэгж: ${dept} — Item (Spare parts) шалгах`, 'Жагсаалтад буруу мэдээлэл байвал шууд засаж болно. Төлөвийг тохируулж "Идэвхтэй" болгоно.');
     b.appendChild(myProgressBanner(dept));
     app.appendChild(b);
   }
-
   app.appendChild(mySummaryCard(dept));
 
-  app.appendChild(exemplarCard());
+  // ---- Миний Item-ууд — шинэ table view ----
+  const myItems = state.items.filter(it=>it.department===dept);
+  const activeN = myItems.filter(it=>it.status==='active').length;
+  const removeN = myItems.filter(it=>it.status==='remove_pending'||it.status==='removed').length;
+  const reviewN = myItems.filter(it=>it.status==='needs_review').length;
 
-  const unclaimedItems = state.items.filter(it=>!it.department);
-  const uiCard = card(`1. Эзэмшигчгүй Item (${unclaimedItems.length})`, 'Алба нэгж тодорхойгүй бүх item эндээс харагдана. Өөрт хамаарахыг олж "Манай албаных" гэж ав. Улаан тэмдэгтэй нь эх файлд "хасах" гэж санал болгосон.');
-  if(unclaimedItems.length===0){ uiCard.appendChild(el('div','empty','Эзэмшигчгүй item алга')); }
-  else {
-    const search = document.createElement('input'); search.type='text'; search.placeholder='Хайх (код/нэр)...'; search.style.width='100%'; search.style.marginBottom='10px';
-    uiCard.appendChild(search);
-    const listWrap = document.createElement('div'); uiCard.appendChild(listWrap);
-    function drawItemList(filter){
-      const f = norm(filter);
-      const filtered = unclaimedItems.filter(it=> !f || norm(it.code).includes(f) || norm(it.name).includes(f));
+  const miCard = card(`Миний Item-үүд (${myItems.length})`, `✓ Идэвхтэй: ${activeN} | ✕ Хасах: ${removeN} | ? Шалгаагүй: ${reviewN}`);
+
+  if(myItems.length > 0){
+    // Status filter chips
+    const chipWrap = document.createElement('div'); chipWrap.style.cssText='display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;';
+    let activeFilter = 'all';
+    const chips = [
+      ['all','Бүгд', myItems.length],
+      ['needs_review','Шалгаагүй', reviewN],
+      ['active','Идэвхтэй', activeN],
+      ['remove_pending','Хасах санал', myItems.filter(it=>it.status==='remove_pending').length],
+      ['removed','Устгасан', myItems.filter(it=>it.status==='removed').length],
+    ];
+    const searchI = document.createElement('input'); searchI.type='text'; searchI.placeholder='Код/Нэр хайх...'; searchI.style.cssText='width:100%;margin-bottom:8px;';
+    miCard.appendChild(searchI);
+    chips.forEach(([val,label,cnt])=>{
+      const ch = document.createElement('button'); ch.className='btn ghost small';
+      ch.textContent=`${label} (${cnt})`; ch.style.fontWeight = val==='all'?'700':'normal';
+      ch.onclick=()=>{ activeFilter=val; drawItemTable(); chips.forEach((c2,i2)=>{chipWrap.children[i2].style.fontWeight=c2[0]===val?'700':'normal';}); };
+      chipWrap.appendChild(ch);
+    });
+    miCard.appendChild(chipWrap);
+
+    const tableWrap = document.createElement('div'); tableWrap.style.overflowX='auto';
+    miCard.appendChild(tableWrap);
+
+    function drawItemTable(){
+      const f = norm(searchI.value);
+      const filtered = myItems.filter(it=>{
+        if(f && !norm(it.code).includes(f) && !norm(it.name).includes(f) && !norm(it.equipment||'').includes(f)) return false;
+        if(activeFilter!=='all' && it.status!==activeFilter) return false;
+        return true;
+      });
+      const statusLabel={active:'✓ Идэвхтэй',removed:'✕ Устгасан',remove_pending:'! Хасах санал',needs_review:'? Шалгаагүй'};
+      const statusColor={active:'var(--accent2)',removed:'var(--danger)',remove_pending:'#f0a500',needs_review:'var(--sub)'};
       const t = document.createElement('table');
-      t.innerHTML = '<tr><th>Код</th><th>Нэр</th><th>Санал (лавлагаа)</th><th>Төлөв</th><th></th></tr>' + filtered.slice(0,150).map(it=>{
-        const removeTag = it.status==='remove_pending' ? '<span class="tag dup">Хасах санал</span>' : '';
-        return `<tr><td style="font-family:var(--mono)">${escapeHtml(it.code)}</td><td>${escapeHtml(it.name)}</td><td class="link-note">${escapeHtml(it.suggested_department||'')}</td><td>${removeTag}</td><td><button class="btn small" data-id="${it.id}">Манай албаных</button></td></tr>`;
-      }).join('');
-      listWrap.innerHTML=''; listWrap.appendChild(t);
-      t.querySelectorAll('button[data-id]').forEach(b=>{
-        b.onclick = async ()=>{
-          const item = state.items.find(x=>x.id===b.dataset.id);
-          await dbUpdate('items', item.id, { department: dept });
-          item.department = dept;
-          render();
+      t.style.fontSize='12px';
+      t.innerHTML=`<tr>
+        <th>#</th><th>Код</th><th>Нэр</th><th>Үзүүлэлт</th><th>Тоноглол</th>
+        <th>UOM</th><th>Min</th><th>Max</th><th>Чухал</th>
+        <th>Segment</th><th>Family</th><th>Class</th><th>Commodity (UNSPSC)</th>
+        <th>Төлөв</th><th></th>
+      </tr>`;
+      filtered.slice(0,300).forEach((it,idx)=>{
+        const u = getUnspsc(it.code) || {};
+        const tr = document.createElement('tr');
+        const stColor = statusColor[it.status]||'var(--sub)';
+        tr.innerHTML=`
+          <td style="color:var(--sub)">${idx+1}</td>
+          <td style="font-family:var(--mono);white-space:nowrap;font-size:11px">${escapeHtml(it.code)}</td>
+          <td><input type="text" value="${escapeHtml(it.name||'')}" style="width:180px" data-id="${it.id}" data-field="name"></td>
+          <td><input type="text" value="${escapeHtml(it.spec||'')}" style="width:120px" data-id="${it.id}" data-field="spec" placeholder="Үзүүлэлт"></td>
+          <td><input type="text" value="${escapeHtml(it.equipment||'')}" style="width:120px" data-id="${it.id}" data-field="equipment" placeholder="Тоноглол"></td>
+          <td><input type="text" value="${escapeHtml(it.uom||'')}" style="width:60px" data-id="${it.id}" data-field="uom"></td>
+          <td><input type="text" value="${escapeHtml(it.min||'')}" style="width:50px" data-id="${it.id}" data-field="min"></td>
+          <td><input type="text" value="${escapeHtml(it.max||'')}" style="width:50px" data-id="${it.id}" data-field="max"></td>
+          <td><select data-id="${it.id}" data-field="criticality" style="width:60px">
+            <option value="">--</option>
+            ${['P1','P2','P3'].map(p=>`<option ${it.criticality===p?'selected':''}>${p}</option>`).join('')}
+          </select></td>
+          <td class="link-note" style="font-size:10px;max-width:120px">${escapeHtml(u.segment||'')}</td>
+          <td class="link-note" style="font-size:10px;max-width:120px">${escapeHtml(u.family||'')}</td>
+          <td class="link-note" style="font-size:10px;max-width:120px">${escapeHtml(u.cls||'')}</td>
+          <td style="font-size:11px;color:var(--accent2);font-weight:600;max-width:150px">${escapeHtml(u.commodity||'')}</td>
+          <td><select data-id="${it.id}" data-field="status" style="width:130px;color:${stColor}">
+            <option value="needs_review" ${it.status==='needs_review'?'selected':''}>? Шалгаагүй</option>
+            <option value="active" ${it.status==='active'?'selected':''}>✓ Идэвхтэй</option>
+            <option value="remove_pending" ${it.status==='remove_pending'?'selected':''}>! Хасах санал</option>
+            <option value="removed" ${it.status==='removed'?'selected':''}>✕ Устгасан</option>
+          </select></td>
+          <td style="color:var(--sub);font-size:10px">${it.note?'📝':''}</td>`;
+        t.appendChild(tr);
+      });
+      tableWrap.innerHTML=''; tableWrap.appendChild(t);
+      if(filtered.length>300) tableWrap.appendChild(el('div','link-note',`+ дахин ${filtered.length-300} мөр, хайлтаа нарийсга`));
+
+      // Inline edit handlers
+      t.querySelectorAll('input[data-id],select[data-id]').forEach(inp=>{
+        inp.onchange = async ()=>{
+          const id=inp.dataset.id; const field=inp.dataset.field; const val=inp.value;
+          const it2=state.items.find(x=>x.id===id); if(!it2) return;
+          if(field==='status' && val==='active'){
+            if(!it2.uom){ toast('UOM заавал бөглөнө'); inp.value=it2.status; return; }
+          }
+          it2[field]=val;
+          await dbUpdate('items', id, {[field]:val});
+          if(field==='status') drawItemTable(); // refresh status colors
         };
       });
-      if(filtered.length>150){ listWrap.appendChild(el('div','link-note',`+ дахин ${filtered.length-150} мөр, хайлтаа нарийсга`)); }
     }
-    drawItemList('');
-    search.oninput = ()=>drawItemList(search.value);
+    drawItemTable();
+    searchI.oninput = drawItemTable;
+  } else {
+    miCard.appendChild(el('div','empty','Танд хуваарилагдсан item алга байна. Item шалгах → "Эзэмшигчгүй Item"-с claim хийнэ үү.'));
   }
-  app.appendChild(uiCard);
-
-  const myItems = state.items.filter(it=>it.department===dept);
-  const miCard = card(`2. Миний Item-үүд — шалгаж баталгаажуулах (${myItems.length})`, 'Category/Min/Max/UOM зөв эсэхийг шалгаад "Идэвхтэй" болго, эсвэл хэрэггүйг "Хасах"/"Устгах" төлөвт шилжүүл.');
-  if(myItems.length===0){ miCard.appendChild(el('div','empty','Одоогоор claim хийсэн item алга')); }
-  myItems.forEach(it=>miCard.appendChild(renderItemReviewRow(it)));
   app.appendChild(miCard);
+
+  // ---- Эзэмшигчгүй item (claim хийх) ----
+  const unclaimedItems = state.items.filter(it=>!it.department);
+  if(unclaimedItems.length>0){
+    const uiCard = card(`Эзэмшигчгүй Item (${unclaimedItems.length})`, 'Алба нэгж тодорхойгүй item-үүд. Өөрт хамаарахыг хайж "Манай албаных" дарж ав.');
+    const searchU = document.createElement('input'); searchU.type='text'; searchU.placeholder='Хайх (код/нэр/тоноглол)...'; searchU.style.cssText='width:100%;margin-bottom:10px;';
+    uiCard.appendChild(searchU);
+    const listWrap = document.createElement('div'); uiCard.appendChild(listWrap);
+    function drawUnclaimed(){
+      const f=norm(searchU.value);
+      const filtered=unclaimedItems.filter(it=>!f||norm(it.code).includes(f)||norm(it.name).includes(f)||norm(it.equipment||'').includes(f)||norm(it.suggested_department||'').includes(f));
+      const t=document.createElement('table');
+      t.style.fontSize='12px';
+      t.innerHTML='<tr><th>Код</th><th>Нэр</th><th>Тоноглол</th><th>UOM</th><th>Min/Max</th><th>Segment → Commodity</th><th>Санал болгосон</th><th>Төлөв</th><th></th></tr>'+
+        filtered.slice(0,200).map(it=>{
+          const u = getUnspsc(it.code) || {};
+          const catStr = u.commodity ? `${escapeHtml(u.segment||'')} › ${escapeHtml(u.cls||'')} › <strong>${escapeHtml(u.commodity)}</strong>` : '';
+          const removeTag=it.status==='remove_pending'?'<span class="tag dup" style="font-size:10px">Хасах санал</span>':'';
+          return `<tr>
+            <td style="font-family:var(--mono);font-size:11px;white-space:nowrap">${escapeHtml(it.code)}</td>
+            <td>${escapeHtml(it.name)}</td>
+            <td class="link-note">${escapeHtml(it.equipment||'')}</td>
+            <td>${escapeHtml(it.uom||'')}</td>
+            <td>${escapeHtml(it.min||'')}/${escapeHtml(it.max||'')}</td>
+            <td style="font-size:11px;max-width:200px">${catStr}</td>
+            <td class="link-note">${escapeHtml(it.suggested_department||'')}</td>
+            <td>${removeTag}</td>
+            <td><button class="btn small" data-id="${it.id}">Манай албаных</button></td>
+          </tr>`;
+        }).join('');
+      listWrap.innerHTML=''; listWrap.appendChild(t);
+      t.querySelectorAll('button[data-id]').forEach(b=>{
+        b.onclick=async()=>{
+          const it2=state.items.find(x=>x.id===b.dataset.id);
+          await dbUpdate('items',it2.id,{department:dept}); it2.department=dept; render();
+        };
+      });
+      if(filtered.length>200) listWrap.appendChild(el('div','link-note',`+ дахин ${filtered.length-200} мөр`));
+    }
+    drawUnclaimed(); searchU.oninput=drawUnclaimed;
+    app.appendChild(uiCard);
+  }
 }
 
 function renderItemReviewRow(it){
@@ -1303,8 +1507,11 @@ function renderExport(app){
     b3.textContent=`Item/Spare parts (${myItems.length}) татах`;
     b3.onclick=()=>{
       const statusLabel={active:'Идэвхтэй',removed:'Устгасан',remove_pending:'Хасах санал',needs_review:'Шалгагдаагүй'};
-      const rows=[['Item Code','Item Name','Category','Min','Max','UOM','Status','Note']];
-      myItems.forEach(it=>rows.push([it.code,it.name,it.category||'',it.min||'',it.max||'',it.uom||'',statusLabel[it.status]||it.status,it.note||'']));
+      const rows=[['Item Code','Item Name','Spec (Үзүүлэлт)','Equipment (Тоноглол)','Min','Max','UOM','Criticality','Status','UNSPSC Segment','UNSPSC Family','UNSPSC Class','UNSPSC Commodity','Note']];
+      myItems.forEach(it=>{
+        const u=getUnspsc(it.code)||{};
+        rows.push([it.code,it.name,it.spec||'',it.equipment||'',it.min||'',it.max||'',it.uom||'',it.criticality||'',statusLabel[it.status]||it.status,u.segment||'',u.family||'',u.cls||'',u.commodity||'',it.note||'']);
+      });
       downloadCsv(rows,`${targetDept||'my'}-items.csv`);
     };
 
@@ -1402,10 +1609,11 @@ function renderExport(app){
   const cIT = card('⬇ Oracle FBDI — Item (EGP_SYSTEM_ITEMS)', 'Зөвхөн "Идэвхтэй" item-ийг Oracle Item Import баганаар. Устгах/Хасах санал орохгүй.');
   const bIT = document.createElement('button'); bIT.className='btn'; bIT.textContent='Oracle Item CSV татах';
   bIT.onclick = ()=>{
-    const rows = [['TRANSACTION_TYPE','ORGANIZATION_CODE','ITEM_NUMBER','DESCRIPTION','ITEM_STATUS','ITEM_TYPE','PRIMARY_UOM_CODE','ITEM_CLASS','SOURCE_SYSTEM_CODE','CATEGORY','MIN_QTY','MAX_QTY','DEPARTMENT']];
+    const rows = [['TRANSACTION_TYPE','ORGANIZATION_CODE','ITEM_NUMBER','DESCRIPTION','ITEM_STATUS','ITEM_TYPE','PRIMARY_UOM_CODE','ITEM_CLASS','SOURCE_SYSTEM_CODE','UNSPSC_SEGMENT','UNSPSC_FAMILY','UNSPSC_CLASS','UNSPSC_COMMODITY_CODE','UNSPSC_COMMODITY_TITLE','MIN_QTY','MAX_QTY','CRITICALITY','DEPARTMENT']];
     state.items.forEach(it=>{
       if(it.status!=='active') return;
-      rows.push([it.transaction_type||'Create', it.org_code||'MMC', it.code, it.name, it.item_status||'Active', it.item_type||'', it.primary_uom||it.uom||'', it.item_class||'', it.source_system||'Legacy', it.category||'', it.min||'', it.max||'', it.department||'']);
+      const u=getUnspsc(it.code)||{};
+      rows.push([it.transaction_type||'Create',it.org_code||'MMC',it.code,it.name,it.item_status||'Active',it.item_type||'',it.primary_uom||it.uom||'',it.item_class||'',it.source_system||'Legacy',u.segment||'',u.family||'',u.cls||'',u.codes?u.codes.com8:'',u.commodity||'',it.min||'',it.max||'',it.criticality||'',it.department||'']);
     });
     downloadCsv(rows, 'oracle-item-import.csv');
   };
