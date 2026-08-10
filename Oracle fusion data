@@ -7,7 +7,3 @@ git branch -M main
 git remote add origin https://github.com/<gatlaga/asset-cleanup.git
 git push -u origin main
 ```
-cd /path/to/asset-tool
-git add index.html schema.sql README.md Template_1_Asset.xlsx Template_2_Item.xlsx
-git commit -m "Update: Add item status tracking, exemplar sheets, and required field validation"
-git push -u origin main
