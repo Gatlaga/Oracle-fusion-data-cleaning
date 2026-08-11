@@ -1040,7 +1040,7 @@ function renderAssetTab(app){
 
   // ---- Миний asset-ууд (TABLE LIST) ----
   const mine = state.fatherAssets.filter(a=>a.department===dept);
-  const mineCard = card(`3. Миний Asset-ууд (${mine.length}) → Child asset болгож задлах`, 'Доорх жагсаалтаас asset сонгоод "▶ Дээтэй ажиллах" дарж child asset нэмнэ.');
+  const mineCard = card(`3. Миний Asset-ууд (${mine.length}) → Child asset болгож задлах`, 'Доорх жагсаалтаас asset сонгоод "▶ Child нэмэх" дарж child asset нэмнэ.');
   if(mine.length===0){ mineCard.appendChild(el('div','empty','Одоогоор эзэмшдэг asset алга')); app.appendChild(mineCard); return; }
 
   // Search filter (if many)
@@ -1083,7 +1083,7 @@ function renderAssetTab(app){
           <td class="link-note">${escapeHtml(fa.process_area||'')}</td>
           <td style="text-align:center;color:var(--accent2);font-weight:700">${childCount}</td>
           <td style="text-align:center">
-            <button class="btn ghost small" style="font-size:11px">▶ Дээтэй</button>
+            <button class="btn ghost small" style="font-size:11px">▶ Child нэмэх</button>
           </td>
         `;
         
@@ -1134,7 +1134,7 @@ function renderAssetTab(app){
         <td class="link-note">${escapeHtml(fa.process_area||'')}</td>
         <td style="text-align:center;color:var(--accent2);font-weight:700">${childCount}</td>
         <td style="text-align:center">
-          <button class="btn ghost small" style="font-size:11px">▶ Дээтэй</button>
+          <button class="btn ghost small" style="font-size:11px">▶ Child нэмэх</button>
         </td>
       `;
       
