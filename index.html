@@ -1077,16 +1077,16 @@ function renderAssetTab(app){
   descDiv.append(descLbl, descSel);
   grid.appendChild(descDiv);
 
-  // 2. Asset Group Code (AUTO-FILL, READ-ONLY)
+  // 2. Asset Group Code (AUTO-FILL, EDITABLE)
   const codeDiv = document.createElement('div');
   const codeLbl = document.createElement('label');
-  codeLbl.textContent = 'Asset Group (автоматаар) *';
+  codeLbl.textContent = 'Asset Group (автоматаар, зассан боломжтой) *';
   codeLbl.style.cssText='font-size:11px;color:var(--sub);display:block;margin-bottom:3px;font-weight:700;';
   const codeInp = document.createElement('input');
   codeInp.type='text';
-  codeInp.placeholder='автоматаар сөлөрнө';
-  codeInp.readOnly=true;
-  codeInp.style.cssText='background:var(--panel2);opacity:.7;';
+  codeInp.placeholder='автоматаар орно, зассан боломжтой';
+  codeInp.readOnly=false;
+  codeInp.style.cssText='';
   codeDiv.append(codeLbl, codeInp);
   grid.appendChild(codeDiv);
 
@@ -1402,16 +1402,19 @@ function renderItemTab(app){
       });
       const statusLabel={active:'✓ Идэвхтэй',removed:'✕ Устгасан',remove_pending:'! Хасах санал',needs_review:'? Шалгаагүй'};
       const statusColor={active:'var(--accent2)',removed:'var(--danger)',remove_pending:'#f0a500',needs_review:'var(--sub)'};
+      
       if(!state.itemPage) state.itemPage = 0;
       const PAGE_SIZE = 200;
       const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
       const page = Math.min(state.itemPage, totalPages - 1);
       const pageItems = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
+      tableWrap.innerHTML='';
+      
       // Pagination controls
       if(filtered.length > PAGE_SIZE){
         const pgWrap = document.createElement('div');
-        pgWrap.style.cssText='display:flex;gap:8px;align-items:center;margin-bottom:8px;font-size:12px;';
+        pgWrap.style.cssText='display:flex;gap:8px;align-items:center;margin-bottom:12px;font-size:12px;';
         const prevBtn = document.createElement('button'); prevBtn.className='btn ghost small';
         prevBtn.textContent='◀ Өмнөх'; prevBtn.disabled = page===0;
         prevBtn.onclick=()=>{ state.itemPage = Math.max(0, page-1); drawItemTable(); };
@@ -1422,7 +1425,7 @@ function renderItemTab(app){
         nextBtn.textContent='Дараах ▶'; nextBtn.disabled = page >= totalPages-1;
         nextBtn.onclick=()=>{ state.itemPage = Math.min(totalPages-1, page+1); drawItemTable(); };
         pgWrap.append(prevBtn, info, nextBtn);
-        itemListWrap.appendChild(pgWrap);
+        tableWrap.appendChild(pgWrap);
       }
 
       const t = document.createElement('table');
@@ -1464,7 +1467,7 @@ function renderItemTab(app){
         t.appendChild(tr);
       });
       tableWrap.innerHTML=''; tableWrap.appendChild(t);
-      if(filtered.length>300) tableWrap.appendChild(el('div','link-note',`+ дахин ${filtered.length-300} мөр, хайлтаа нарийсга`));
+      if(filtered.length>200) tableWrap.appendChild(el('div','link-note',`+ дахин ${filtered.length-200} мөр, хайлтаа нарийсга`));
 
       // Inline edit handlers
       t.querySelectorAll('input[data-id],select[data-id]').forEach(inp=>{
