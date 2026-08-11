@@ -545,6 +545,7 @@ function renderAdmin(app){
   detailTable.innerHTML=`<tr>
     <th style="text-align:left">Алба нэгж</th>
     <th>Father Asset</th>
+    <th>Asset шалгасан</th>
     <th>Child Asset</th>
     <th>Item нийт</th>
     <th>Item идэвхтэй %</th>
@@ -556,6 +557,8 @@ function renderAdmin(app){
   state.departments.forEach(d=>{
     const s = deptProgressStatus(d.name);
     const myFa = state.fatherAssets.filter(a=>a.department===d.name);
+    const verifiedFa = myFa.filter(a=>a.verified===true||a.verified==='true').length;
+    const verifiedPct = myFa.length>0 ? Math.round(verifiedFa/myFa.length*100) : 0;
     const myCa = state.childAssets.filter(c=>c.department===d.name);
     const myIt = state.items.filter(it=>it.department===d.name);
     const activeIt = myIt.filter(it=>it.status==='active').length;
@@ -574,6 +577,11 @@ function renderAdmin(app){
     tr.innerHTML=`
       <td style="font-weight:500;padding:8px">${escapeHtml(d.name)}</td>
       <td style="text-align:center;padding:8px"><strong>${myFa.length}</strong></td>
+      <td style="text-align:center;padding:8px">
+        <div style="background:${verifiedPct>=80?'#1a3a2e':verifiedPct>=50?'#2a3a1a':'#3a2226'};padding:4px 8px;border-radius:4px;font-size:11px;font-weight:700;color:${verifiedPct>=80?'var(--accent2)':verifiedPct>=50?'#f0a500':'var(--danger)'}">
+          ✅ ${verifiedFa}/${myFa.length} (${verifiedPct}%)
+        </div>
+      </td>
       <td style="text-align:center;padding:8px"><strong style="color:var(--accent2)">${myCa.length}</strong></td>
       <td style="text-align:center;padding:8px"><strong>${myIt.length}</strong></td>
       <td style="text-align:center;padding:8px">
@@ -1305,7 +1313,7 @@ function renderAssetTab(app){
             <button class="btn ghost small asset-verify" data-faid="${fa.id}" style="font-size:10px;${isVerified?'color:var(--accent2);border-color:var(--accent2)':''}">${isVerified?'✅ Шалгасан':'☐ Шалгах'}</button>
           </td>
           <td style="text-align:center">
-            <button class="btn ghost small" style="font-size:11px">▶ Child нэмэх</button>
+            <button class="btn ghost small expand-child-btn" style="font-size:11px">▶ Child нэмэх</button>
           </td>`;
         // Note save
         const noteInp = tr.querySelector('.asset-note');
@@ -1327,8 +1335,8 @@ function renderAssetTab(app){
           tr.style.background = newVal ? 'rgba(0,200,120,0.06)' : '';
           toast(newVal ? '✅ Asset баталгаажлаа' : '☐ Баталгаажуулалт цуцлагдлаа');
         };
-        const expandBtn = tr.querySelector('button');
-        expandBtn.onclick = ()=>toggleAssetDetail(fa, dept, app);
+        const expandBtn = tr.querySelector('.expand-child-btn');
+        expandBtn.onclick = (e)=>{ e.stopPropagation(); toggleAssetDetail(fa, dept, app); };
         table.appendChild(tr);
       });
       return table;
@@ -1460,13 +1468,13 @@ function renderItemTab(app){
         pgWrap.innerHTML='';
         const prevBtn = document.createElement('button'); prevBtn.className='btn ghost small';
         prevBtn.textContent='◀ Өмнөх'; prevBtn.disabled = page===0;
-        prevBtn.onclick=()=>{ state.itemPage = Math.max(0, state.itemPage-1); drawItemTable(); };
+        prevBtn.onclick=()=>{ state.itemPage = Math.max(0, state.itemPage-1); drawItemTable(); miCard.scrollIntoView({behavior:'smooth',block:'start'}); };
         const info = document.createElement('span');
         info.style.color='var(--sub)';
         info.textContent=`${page*PAGE_SIZE+1}–${Math.min((page+1)*PAGE_SIZE, filtered.length)} / ${filtered.length}`;
         const nextBtn = document.createElement('button'); nextBtn.className='btn ghost small';
         nextBtn.textContent='Дараах ▶'; nextBtn.disabled = page >= totalPages-1;
-        nextBtn.onclick=()=>{ state.itemPage = Math.min(totalPages-1, state.itemPage+1); drawItemTable(); };
+        nextBtn.onclick=()=>{ state.itemPage = Math.min(totalPages-1, state.itemPage+1); drawItemTable(); miCard.scrollIntoView({behavior:'smooth',block:'start'}); };
         pgWrap.append(prevBtn, info, nextBtn);
       } else {
         topPaginationWrap.innerHTML='';
@@ -2446,6 +2454,19 @@ function el(tag, cls, text){ const e = document.createElement(tag); e.className=
 function escapeHtml(s){ return (s||'').toString().replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
 
 loadAll();
+
+// Auto-refresh: tab руу шилжихэд Supabase-аас дахин ачаалах
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState === 'visible' && sb && session.role){
+    loadAll();
+  }
+});
+// 2 минут тутам auto-refresh (бусад хүмүүсийн өөрчлөлтийг авах)
+setInterval(()=>{
+  if(sb && session.role && document.visibilityState === 'visible'){
+    loadAll();
+  }
+}, 120000);
 </script>
 </body>
 </html>
