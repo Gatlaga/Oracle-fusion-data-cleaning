@@ -1432,13 +1432,13 @@ function renderItemTab(app){
         pgWrap.innerHTML='';
         const prevBtn = document.createElement('button'); prevBtn.className='btn ghost small';
         prevBtn.textContent='◀ Өмнөх'; prevBtn.disabled = page===0;
-        prevBtn.onclick=()=>{ state.itemPage = Math.max(0, page-1); drawItemTable(); };
+        prevBtn.onclick=()=>{ state.itemPage = Math.max(0, state.itemPage-1); drawItemTable(); };
         const info = document.createElement('span');
         info.style.color='var(--sub)';
         info.textContent=`${page*PAGE_SIZE+1}–${Math.min((page+1)*PAGE_SIZE, filtered.length)} / ${filtered.length}`;
         const nextBtn = document.createElement('button'); nextBtn.className='btn ghost small';
         nextBtn.textContent='Дараах ▶'; nextBtn.disabled = page >= totalPages-1;
-        nextBtn.onclick=()=>{ state.itemPage = Math.min(totalPages-1, page+1); drawItemTable(); };
+        nextBtn.onclick=()=>{ state.itemPage = Math.min(totalPages-1, state.itemPage+1); drawItemTable(); };
         pgWrap.append(prevBtn, info, nextBtn);
       } else {
         topPaginationWrap.innerHTML='';
