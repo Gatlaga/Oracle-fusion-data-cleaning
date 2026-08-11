@@ -1390,7 +1390,7 @@ function renderItemTab(app){
     chips.forEach(([val,label,cnt])=>{
       const ch = document.createElement('button'); ch.className='btn ghost small';
       ch.textContent=`${label} (${cnt})`; ch.style.fontWeight = val==='all'?'700':'normal';
-      ch.onclick=()=>{ activeFilter=val; drawItemTable(); chips.forEach((c2,i2)=>{chipWrap.children[i2].style.fontWeight=c2[0]===val?'700':'normal';}); };
+      ch.onclick=()=>{ activeFilter=val; state.itemPage=0; drawItemTable(); chips.forEach((c2,i2)=>{chipWrap.children[i2].style.fontWeight=c2[0]===val?'700':'normal';}); };
       chipWrap.appendChild(ch);
     });
     miCard.appendChild(chipWrap);
@@ -1495,7 +1495,7 @@ function renderItemTab(app){
       });
     }
     drawItemTable();
-    searchI.oninput = drawItemTable;
+    searchI.oninput = ()=>{ state.itemPage=0; drawItemTable(); };
   } else {
     miCard.appendChild(el('div','empty','Танд хуваарилагдсан item алга байна. Item шалгах → "Эзэмшигчгүй Item"-с claim хийнэ үү.'));
   }
@@ -1511,10 +1511,36 @@ function renderItemTab(app){
     function drawUnclaimed(){
       const f=norm(searchU.value);
       const filtered=unclaimedItems.filter(it=>!f||norm(it.code).includes(f)||norm(it.name).includes(f)||norm(it.equipment||'').includes(f)||norm(it.suggested_department||'').includes(f));
+      
+      if(!state.unclaimedPage) state.unclaimedPage = 0;
+      const PAGE_SIZE = 200;
+      const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+      const page = Math.min(state.unclaimedPage, totalPages - 1);
+      const pageItems = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+      
+      listWrap.innerHTML='';
+      
+      // Pagination
+      if(filtered.length > PAGE_SIZE){
+        const pgWrap = document.createElement('div');
+        pgWrap.style.cssText='display:flex;gap:8px;align-items:center;margin-bottom:12px;font-size:12px;';
+        const prevBtn = document.createElement('button'); prevBtn.className='btn ghost small';
+        prevBtn.textContent='◀ Өмнөх'; prevBtn.disabled = page===0;
+        prevBtn.onclick=()=>{ state.unclaimedPage = Math.max(0, page-1); drawUnclaimed(); };
+        const info = document.createElement('span');
+        info.style.color='var(--sub)';
+        info.textContent=`${page*PAGE_SIZE+1}–${Math.min((page+1)*PAGE_SIZE, filtered.length)} / ${filtered.length}`;
+        const nextBtn = document.createElement('button'); nextBtn.className='btn ghost small';
+        nextBtn.textContent='Дараах ▶'; nextBtn.disabled = page >= totalPages-1;
+        nextBtn.onclick=()=>{ state.unclaimedPage = Math.min(totalPages-1, page+1); drawUnclaimed(); };
+        pgWrap.append(prevBtn, info, nextBtn);
+        listWrap.appendChild(pgWrap);
+      }
+      
       const t=document.createElement('table');
       t.style.fontSize='12px';
       t.innerHTML='<tr><th>Код</th><th>Нэр</th><th>Тоноглол</th><th>UOM</th><th>Min/Max</th><th>Segment → Commodity</th><th>Санал болгосон</th><th>Төлөв</th><th></th></tr>'+
-        filtered.slice(0,200).map(it=>{
+        pageItems.map(it=>{
           const u = getUnspsc(it.code) || {};
           const catStr = u.commodity ? `${escapeHtml(u.segment||'')} › ${escapeHtml(u.cls||'')} › <strong>${escapeHtml(u.commodity)}</strong>` : '';
           const removeTag=it.status==='remove_pending'?'<span class="tag dup" style="font-size:10px">Хасах санал</span>':'';
@@ -1530,7 +1556,7 @@ function renderItemTab(app){
             <td><button class="btn small" data-id="${it.id}">Манай албаных</button></td>
           </tr>`;
         }).join('');
-      listWrap.innerHTML=''; listWrap.appendChild(t);
+      listWrap.appendChild(t);
       t.querySelectorAll('button[data-id]').forEach(b=>{
         b.onclick=async()=>{
           const it2=state.items.find(x=>x.id===b.dataset.id);
