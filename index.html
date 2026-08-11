@@ -211,10 +211,10 @@ async function loadAll(){
   try{
     const [d,f,c,i,l] = await Promise.all([
       sb.from('departments').select('*'),
-      sb.from('father_assets').select('*'),
-      sb.from('child_assets').select('*'),
-      sb.from('items').select('*'),
-      sb.from('links').select('*'),
+      sb.from('father_assets').select('*').limit(10000),
+      sb.from('child_assets').select('*').limit(10000),
+      sb.from('items').select('*').limit(10000),
+      sb.from('links').select('*').limit(10000),
     ]);
     for(const r of [d,f,c,i,l]){ if(r.error) throw r.error; }
     state.departments = (d.data || []).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
@@ -1278,17 +1278,21 @@ function renderAssetTab(app){
         <th style="text-align:left">Asset Code</th>
         <th>Asset Description</th>
         <th>Asset Group</th>
-        <th>Asset Category</th>
+        <th>Category</th>
         <th>Process Area</th>
         <th>Child</th>
+        <th>Тайлбар</th>
+        <th>Төлөв</th>
         <th></th>
       </tr>`;
       list.forEach(fa=>{
         const childCount = state.childAssets.filter(c=>c.father_id===fa.id).length;
+        const isVerified = fa.verified === true || fa.verified === 'true';
         const tr = document.createElement('tr');
         tr.style.cursor='pointer';
-        tr.onmouseenter=()=>tr.style.background='var(--panel2)';
-        tr.onmouseleave=()=>tr.style.background='';
+        tr.style.background = isVerified ? 'rgba(0,200,120,0.06)' : '';
+        tr.onmouseenter=()=>tr.style.background = isVerified ? 'rgba(0,200,120,0.12)' : 'var(--panel2)';
+        tr.onmouseleave=()=>tr.style.background = isVerified ? 'rgba(0,200,120,0.06)' : '';
         tr.innerHTML=`
           <td style="font-family:var(--mono);font-size:11px">${escapeHtml(fa.code||'')}</td>
           <td style="font-weight:500">${escapeHtml(fa.name)}</td>
@@ -1296,9 +1300,33 @@ function renderAssetTab(app){
           <td class="link-note">${escapeHtml(fa.asset_category||'')}</td>
           <td class="link-note">${escapeHtml(fa.process_area||'')}</td>
           <td style="text-align:center;color:var(--accent2);font-weight:700">${childCount}</td>
+          <td><input type="text" value="${escapeHtml(fa.note||'')}" placeholder="Тайлбар..." style="width:120px;font-size:11px" class="asset-note" data-faid="${fa.id}"></td>
+          <td style="text-align:center">
+            <button class="btn ghost small asset-verify" data-faid="${fa.id}" style="font-size:10px;${isVerified?'color:var(--accent2);border-color:var(--accent2)':''}">${isVerified?'✅ Шалгасан':'☐ Шалгах'}</button>
+          </td>
           <td style="text-align:center">
             <button class="btn ghost small" style="font-size:11px">▶ Child нэмэх</button>
           </td>`;
+        // Note save
+        const noteInp = tr.querySelector('.asset-note');
+        noteInp.onchange = async ()=>{
+          fa.note = noteInp.value;
+          await dbUpdate('father_assets', fa.id, {note: noteInp.value});
+          toast('✅ Тайлбар хадгалагдлаа');
+        };
+        // Verify toggle
+        const verifyBtn = tr.querySelector('.asset-verify');
+        verifyBtn.onclick = async (e)=>{
+          e.stopPropagation();
+          const newVal = !isVerified;
+          fa.verified = newVal;
+          await dbUpdate('father_assets', fa.id, {verified: newVal});
+          verifyBtn.textContent = newVal ? '✅ Шалгасан' : '☐ Шалгах';
+          verifyBtn.style.color = newVal ? 'var(--accent2)' : '';
+          verifyBtn.style.borderColor = newVal ? 'var(--accent2)' : '';
+          tr.style.background = newVal ? 'rgba(0,200,120,0.06)' : '';
+          toast(newVal ? '✅ Asset баталгаажлаа' : '☐ Баталгаажуулалт цуцлагдлаа');
+        };
         const expandBtn = tr.querySelector('button');
         expandBtn.onclick = ()=>toggleAssetDetail(fa, dept, app);
         table.appendChild(tr);
