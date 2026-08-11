@@ -1357,7 +1357,13 @@ function renderAssetTab(app){
 // ================= ITEM TAB =================
 function renderItemTab(app){
   if(!ensureDept(app, 'Item (Spare parts) шалгаж баталгаажуулах.')) return;
-  const dept = state.currentDept;
+  let dept = state.currentDept;
+  
+  // Manager бол session.deptName-аар override хий (гарсал)
+  if(session.role==='manager' && session.deptName){
+    dept = session.deptName;
+    state.currentDept = dept;
+  }
 
   if(session.role==='manager'){
     const b = card(`Таны алба нэгж: ${dept} — Item (Spare parts) шалгах`, 'Жагсаалтад буруу мэдээлэл байвал шууд засаж болно. Төлөвийг тохируулж "Идэвхтэй" болгоно.');
@@ -1439,7 +1445,7 @@ function renderItemTab(app){
       }
 
       const t = document.createElement('table');
-      t.style.fontSize='12px';
+      t.style.cssText='font-size:12px;width:100%;border-collapse:collapse;';
       t.innerHTML=`<tr>
         <th>#</th><th>Код</th><th>Нэр</th><th>Үзүүлэлт</th><th>Тоноглол</th>
         <th>UOM</th><th>Min</th><th>Max</th><th>Чухал</th>
