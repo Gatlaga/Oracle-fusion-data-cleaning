@@ -841,11 +841,16 @@ async function runImport(kind, mapping, rows){
     for(let i=0;i<toInsert.length;i+=BATCH){
       const chunk = toInsert.slice(i,i+BATCH);
       const { error } = await sb.from('items').insert(chunk);
-      if(error){ toast('Импортын алдаа: '+error.message); break; }
+      if(error){ toast('❌ Импортын алдаа: '+error.message); break; }
       state.items.push(...chunk);
       imported+=chunk.length;
     }
-    toast(`${toInsert.length} item импортлогдлоо`);
+    const activeI = toInsert.filter(x=>x.status==='active').length;
+    const skipDuplicates = rows.length - toInsert.length;
+    const msg = skipDuplicates > 0 
+      ? `✅ ${imported} item импортлогдлоо. ${skipDuplicates} давхарлал алгаалагдсан.`
+      : `✅ ${imported} item импортлогдлоо`;
+    toast(msg);
   }
   render();
 }
@@ -1390,6 +1395,12 @@ function renderItemTab(app){
     });
     miCard.appendChild(chipWrap);
 
+    // Top pagination controls
+    const topPaginationWrap = document.createElement('div');
+    topPaginationWrap.id = 'top-pagination';
+    topPaginationWrap.style.cssText='display:flex;gap:8px;align-items:center;margin-bottom:12px;font-size:12px;';
+    miCard.appendChild(topPaginationWrap);
+
     const tableWrap = document.createElement('div'); tableWrap.style.overflowX='auto';
     miCard.appendChild(tableWrap);
 
@@ -1409,12 +1420,10 @@ function renderItemTab(app){
       const page = Math.min(state.itemPage, totalPages - 1);
       const pageItems = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
-      tableWrap.innerHTML='';
-      
-      // Pagination controls
+      // Top pagination controls
       if(filtered.length > PAGE_SIZE){
-        const pgWrap = document.createElement('div');
-        pgWrap.style.cssText='display:flex;gap:8px;align-items:center;margin-bottom:12px;font-size:12px;';
+        const pgWrap = topPaginationWrap;
+        pgWrap.innerHTML='';
         const prevBtn = document.createElement('button'); prevBtn.className='btn ghost small';
         prevBtn.textContent='◀ Өмнөх'; prevBtn.disabled = page===0;
         prevBtn.onclick=()=>{ state.itemPage = Math.max(0, page-1); drawItemTable(); };
@@ -1425,7 +1434,8 @@ function renderItemTab(app){
         nextBtn.textContent='Дараах ▶'; nextBtn.disabled = page >= totalPages-1;
         nextBtn.onclick=()=>{ state.itemPage = Math.min(totalPages-1, page+1); drawItemTable(); };
         pgWrap.append(prevBtn, info, nextBtn);
-        tableWrap.appendChild(pgWrap);
+      } else {
+        topPaginationWrap.innerHTML='';
       }
 
       const t = document.createElement('table');
