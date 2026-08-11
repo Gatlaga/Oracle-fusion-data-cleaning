@@ -1510,13 +1510,45 @@ function renderItemTab(app){
   // ---- Эзэмшигчгүй item (claim хийх) ----
   const unclaimedItems = state.items.filter(it=>!it.department);
   if(unclaimedItems.length>0){
-    const uiCard = card(`Эзэмшигчгүй Item (${unclaimedItems.length})`, 'Алба нэгж тодорхойгүй item-үүд. Өөрт хамаарахыг хайж "Манай албаных" дарж ав.');
-    const searchU = document.createElement('input'); searchU.type='text'; searchU.placeholder='Хайх (код/нэр/тоноглол)...'; searchU.style.cssText='width:100%;margin-bottom:10px;';
+    const removeN_u = unclaimedItems.filter(it=>it.status==='remove_pending'||it.status==='removed').length;
+    const reviewN_u = unclaimedItems.filter(it=>it.status==='needs_review').length;
+    const uiCard = card(`Эзэмшигчгүй Item (${unclaimedItems.length})`, `✓ Идэвхтэй: ${unclaimedItems.filter(it=>it.status==='active').length} | ✕ Хасах: ${removeN_u} | ? Шалгаагүй: ${reviewN_u}`);
+    
+    const searchU = document.createElement('input'); searchU.type='text'; searchU.placeholder='Код/Нэр хайх...'; searchU.style.cssText='width:100%;margin-bottom:8px;';
     uiCard.appendChild(searchU);
-    const listWrap = document.createElement('div'); uiCard.appendChild(listWrap);
+    
+    // Status filter chips
+    const chipWrap_u = document.createElement('div'); chipWrap_u.style.cssText='display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;';
+    let activeFilter_u = 'all';
+    const chips_u = [
+      ['all','Бүгд', unclaimedItems.length],
+      ['needs_review','Шалгаагүй', reviewN_u],
+      ['active','Идэвхтэй', unclaimedItems.filter(it=>it.status==='active').length],
+      ['remove_pending','Хасах санал', unclaimedItems.filter(it=>it.status==='remove_pending').length],
+      ['removed','Устгасан', unclaimedItems.filter(it=>it.status==='removed').length],
+    ];
+    chips_u.forEach(([val,label,cnt])=>{
+      const ch = document.createElement('button'); ch.className='btn ghost small';
+      ch.textContent=`${label} (${cnt})`; ch.style.fontWeight = val==='all'?'700':'normal';
+      ch.onclick=()=>{ activeFilter_u=val; state.unclaimedPage=0; drawUnclaimed(); chips_u.forEach((c2,i2)=>{chipWrap_u.children[i2].style.fontWeight=c2[0]===val?'700':'normal';}); };
+      chipWrap_u.appendChild(ch);
+    });
+    uiCard.appendChild(chipWrap_u);
+    
+    // Top pagination
+    const topPaginationWrap_u = document.createElement('div');
+    topPaginationWrap_u.id = 'top-pagination-u';
+    topPaginationWrap_u.style.cssText='display:flex;gap:8px;align-items:center;margin-bottom:12px;font-size:12px;';
+    uiCard.appendChild(topPaginationWrap_u);
+    
+    const listWrap = document.createElement('div'); listWrap.style.overflowX='auto'; uiCard.appendChild(listWrap);
     function drawUnclaimed(){
       const f=norm(searchU.value);
-      const filtered=unclaimedItems.filter(it=>!f||norm(it.code).includes(f)||norm(it.name).includes(f)||norm(it.equipment||'').includes(f)||norm(it.suggested_department||'').includes(f));
+      const filtered=unclaimedItems.filter(it=>{
+        if(f && !norm(it.code).includes(f) && !norm(it.name).includes(f) && !norm(it.equipment||'').includes(f) && !norm(it.suggested_department||'').includes(f)) return false;
+        if(activeFilter_u!=='all' && it.status!==activeFilter_u) return false;
+        return true;
+      });
       
       if(!state.unclaimedPage) state.unclaimedPage = 0;
       const PAGE_SIZE = 200;
@@ -1526,10 +1558,10 @@ function renderItemTab(app){
       
       listWrap.innerHTML='';
       
-      // Pagination
+      // Top pagination
       if(filtered.length > PAGE_SIZE){
-        const pgWrap = document.createElement('div');
-        pgWrap.style.cssText='display:flex;gap:8px;align-items:center;margin-bottom:12px;font-size:12px;';
+        const pgWrap = topPaginationWrap_u;
+        pgWrap.innerHTML='';
         const prevBtn = document.createElement('button'); prevBtn.className='btn ghost small';
         prevBtn.textContent='◀ Өмнөх'; prevBtn.disabled = page===0;
         prevBtn.onclick=()=>{ state.unclaimedPage = Math.max(0, page-1); drawUnclaimed(); };
@@ -1540,17 +1572,19 @@ function renderItemTab(app){
         nextBtn.textContent='Дараах ▶'; nextBtn.disabled = page >= totalPages-1;
         nextBtn.onclick=()=>{ state.unclaimedPage = Math.min(totalPages-1, page+1); drawUnclaimed(); };
         pgWrap.append(prevBtn, info, nextBtn);
-        listWrap.appendChild(pgWrap);
+      } else {
+        topPaginationWrap_u.innerHTML='';
       }
       
       const t=document.createElement('table');
-      t.style.fontSize='12px';
-      t.innerHTML='<tr><th>Код</th><th>Нэр</th><th>Тоноглол</th><th>UOM</th><th>Min/Max</th><th>Segment → Commodity</th><th>Санал болгосон</th><th>Төлөв</th><th></th></tr>'+
-        pageItems.map(it=>{
+      t.style.cssText='font-size:12px;width:100%;border-collapse:collapse;';
+      t.innerHTML='<tr><th>#</th><th>Код</th><th>Нэр</th><th>Тоноглол</th><th>UOM</th><th>Min/Max</th><th>Segment → Commodity</th><th>Санал болгосон</th><th>Төлөв</th><th></th></tr>'+
+        pageItems.map((it,idx)=>{
           const u = getUnspsc(it.code) || {};
           const catStr = u.commodity ? `${escapeHtml(u.segment||'')} › ${escapeHtml(u.cls||'')} › <strong>${escapeHtml(u.commodity)}</strong>` : '';
           const removeTag=it.status==='remove_pending'?'<span class="tag dup" style="font-size:10px">Хасах санал</span>':'';
           return `<tr>
+            <td style="color:var(--sub);font-family:var(--mono);font-size:11px">${page*PAGE_SIZE+idx+1}</td>
             <td style="font-family:var(--mono);font-size:11px;white-space:nowrap">${escapeHtml(it.code)}</td>
             <td>${escapeHtml(it.name)}</td>
             <td class="link-note">${escapeHtml(it.equipment||'')}</td>
