@@ -1003,7 +1003,9 @@ function renderAssetTab(app){
     if(!validateEmpty(assetDescInp.value, 'Asset Description')) { assetDescInp.focus(); return; }
     if(!validateEmpty(areaSel.value, 'Process Area')) { areaSel.focus(); return; }
 
-    addBtn.disabled=true; addBtn.textContent='Хадгалж байна...';
+    addBtn.disabled=true; 
+    const origText = addBtn.textContent;
+    addBtn.textContent='⏳ Хадгалж байна...';
 
     const row = {
       id: uid(),
@@ -1018,38 +1020,148 @@ function renderAssetTab(app){
     };
 
     const {error} = await dbInsert('father_assets', row);
-    if(error){ toast('Алдаа: '+error.message); addBtn.disabled=false; addBtn.textContent='+ Asset нэмэх'; return; }
+    if(error){ 
+      toast('❌ Алдаа: '+error.message); 
+      addBtn.disabled=false; 
+      addBtn.textContent=origText; 
+      return; 
+    }
 
     state.fatherAssets.push(row);
+    toast('✅ Asset нэмэгдлээ');
     // Reset form
     descSel.value=''; codeInp.value=''; catInp.value=''; assetDescInp.value=''; areaSel.innerHTML='<option value="">-- сонго --</option>';
-    addBtn.disabled=false; addBtn.textContent='+ Asset нэмэх';
+    addBtn.disabled=false; 
+    addBtn.textContent=origText;
     render();
   };
   addCard.appendChild(addBtn);
   app.appendChild(addCard);
 
-  // ---- Миний asset-ууд (detail + child задлах) ----
+  // ---- Миний asset-ууд (TABLE LIST) ----
   const mine = state.fatherAssets.filter(a=>a.department===dept);
-  const mineCard = card(`3. Миний Asset-ууд (${mine.length}) → Child asset болгож задлах`, 'Asset бүрийг дарж нээгээд бодит эд ангиудад задал. Дэлгэрэнгүй мэдээлэл харна уу.');
-  if(mine.length===0){ mineCard.appendChild(el('div','empty','Одоогоор эзэмшдэг asset алга')); }
+  const mineCard = card(`3. Миний Asset-ууд (${mine.length}) → Child asset болгож задлах`, 'Доорх жагсаалтаас asset сонгоод "▶ Дээтэй ажиллах" дарж child asset нэмнэ.');
+  if(mine.length===0){ mineCard.appendChild(el('div','empty','Одоогоор эзэмшдэг asset алга')); app.appendChild(mineCard); return; }
 
-  // Filter for mine
+  // Search filter (if many)
   if(mine.length>5){
-    const mf = document.createElement('input'); mf.type='text'; mf.placeholder='Хайх...'; mf.style.cssText='width:100%;margin-bottom:10px;';
+    const mf = document.createElement('input'); mf.type='text'; mf.placeholder='Хайх (код/нэр)...'; 
+    mf.style.cssText='width:100%;margin-bottom:10px;padding:8px 10px;font-size:13px;';
     mineCard.appendChild(mf);
-    const mineWrap = document.createElement('div'); mineCard.appendChild(mineWrap);
+    
+    const mineListWrap = document.createElement('div'); mineCard.appendChild(mineListWrap);
+    
     function drawMine(){
       const f=norm(mf.value);
-      const filtered=mine.filter(a=>!f||norm(a.code).includes(f)||norm(a.name).includes(f));
-      mineWrap.innerHTML='';
-      filtered.forEach(fa=>mineWrap.appendChild(renderFatherAssetBlock(fa,dept)));
+      const filtered=mine.filter(a=>!f||norm(a.code||'').includes(f)||norm(a.name).includes(f)||norm(a.asset_group_desc||'').includes(f));
+      mineListWrap.innerHTML='';
+      
+      const table = document.createElement('table');
+      table.style.fontSize='12px';
+      table.innerHTML=`<tr>
+        <th style="text-align:left">Asset Code</th>
+        <th>Asset Description</th>
+        <th>Asset Group</th>
+        <th>Asset Category</th>
+        <th>Process Area</th>
+        <th>Child</th>
+        <th></th>
+      </tr>`;
+      
+      filtered.forEach(fa=>{
+        const childCount = state.childAssets.filter(c=>c.father_id===fa.id).length;
+        const tr = document.createElement('tr');
+        tr.style.cursor='pointer';
+        tr.onmouseenter=()=>tr.style.background='var(--panel2)';
+        tr.onmouseleave=()=>tr.style.background='';
+        
+        tr.innerHTML=`
+          <td style="font-family:var(--mono);font-size:11px">${escapeHtml(fa.code||'')}</td>
+          <td style="font-weight:500">${escapeHtml(fa.name)}</td>
+          <td>${escapeHtml(fa.asset_group||'')}</td>
+          <td class="link-note">${escapeHtml(fa.asset_category||'')}</td>
+          <td class="link-note">${escapeHtml(fa.process_area||'')}</td>
+          <td style="text-align:center;color:var(--accent2);font-weight:700">${childCount}</td>
+          <td style="text-align:center">
+            <button class="btn ghost small" style="font-size:11px">▶ Дээтэй</button>
+          </td>
+        `;
+        
+        // Expand detail on button click
+        const expandBtn = tr.querySelector('button');
+        expandBtn.onclick = (e)=>{
+          e.stopPropagation();
+          if(!state.openAssets) state.openAssets = new Set();
+          if(state.openAssets.has(fa.id)) state.openAssets.delete(fa.id);
+          else state.openAssets.add(fa.id);
+          render();
+        };
+        
+        table.appendChild(tr);
+      });
+      
+      mineListWrap.appendChild(table);
     }
-    drawMine(); mf.oninput=drawMine;
+    
+    mf.oninput=drawMine;
+    drawMine();
   } else {
-    mine.forEach(fa=>mineCard.appendChild(renderFatherAssetBlock(fa,dept)));
+    // No search needed - show table directly
+    const table = document.createElement('table');
+    table.style.fontSize='12px';
+    table.innerHTML=`<tr>
+      <th style="text-align:left">Asset Code</th>
+      <th>Asset Description</th>
+      <th>Asset Group</th>
+      <th>Asset Category</th>
+      <th>Process Area</th>
+      <th>Child</th>
+      <th></th>
+    </tr>`;
+    
+    mine.forEach(fa=>{
+      const childCount = state.childAssets.filter(c=>c.father_id===fa.id).length;
+      const tr = document.createElement('tr');
+      tr.style.cursor='pointer';
+      tr.onmouseenter=()=>tr.style.background='var(--panel2)';
+      tr.onmouseleave=()=>tr.style.background='';
+      
+      tr.innerHTML=`
+        <td style="font-family:var(--mono);font-size:11px">${escapeHtml(fa.code||'')}</td>
+        <td style="font-weight:500">${escapeHtml(fa.name)}</td>
+        <td>${escapeHtml(fa.asset_group||'')}</td>
+        <td class="link-note">${escapeHtml(fa.asset_category||'')}</td>
+        <td class="link-note">${escapeHtml(fa.process_area||'')}</td>
+        <td style="text-align:center;color:var(--accent2);font-weight:700">${childCount}</td>
+        <td style="text-align:center">
+          <button class="btn ghost small" style="font-size:11px">▶ Дээтэй</button>
+        </td>
+      `;
+      
+      const expandBtn = tr.querySelector('button');
+      expandBtn.onclick = (e)=>{
+        e.stopPropagation();
+        if(!state.openAssets) state.openAssets = new Set();
+        if(state.openAssets.has(fa.id)) state.openAssets.delete(fa.id);
+        else state.openAssets.add(fa.id);
+        render();
+      };
+      
+      table.appendChild(tr);
+    });
+    
+    mineCard.appendChild(table);
   }
+  
   app.appendChild(mineCard);
+  
+  // ---- Expanded detail views (stacked below list) ----
+  const openAssets = state.openAssets || new Set();
+  mine.forEach(fa=>{
+    if(openAssets.has(fa.id)){
+      app.appendChild(renderFatherAssetBlock(fa, dept));
+    }
+  });
 }
 
 // ================= ITEM TAB =================
