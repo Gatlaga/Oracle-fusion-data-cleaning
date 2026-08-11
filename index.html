@@ -75,6 +75,7 @@
   .conn-ok{background:#20362a;color:var(--accent2);}
   .conn-bad{background:#3a2226;color:var(--danger);}
   .setup-screen{max-width:520px;margin:60px auto;text-align:center;}
+  @keyframes fadeIn{ from{opacity:0;transform:translateY(-6px);} to{opacity:1;transform:translateY(0);} }
 </style>
 </head>
 <body>
@@ -841,6 +842,31 @@ function mySummaryCard(deptName){
 }
 
 // ================= ASSET TAB =================
+// ---- Inline expand asset detail (render() дуудахгүй) ----
+function toggleAssetDetail(fa, dept, app){
+  if(!state.openAssets) state.openAssets = new Set();
+  const detailId = 'asset-detail-' + fa.id;
+  const existing = document.getElementById(detailId);
+  if(existing){
+    // Collapse
+    existing.style.maxHeight = '0';
+    existing.style.opacity = '0';
+    setTimeout(()=>{ if(existing.parentNode) existing.remove(); }, 250);
+    state.openAssets.delete(fa.id);
+  } else {
+    // Expand
+    state.openAssets.add(fa.id);
+    const block = renderFatherAssetBlock(fa, dept);
+    block.id = detailId;
+    block.style.cssText += 'transition:max-height .25s ease,opacity .25s ease;max-height:0;opacity:0;overflow:hidden;';
+    app.appendChild(block);
+    requestAnimationFrame(()=>{
+      block.style.maxHeight = '1200px';
+      block.style.opacity = '1';
+    });
+  }
+}
+
 function renderAssetTab(app){
   if(!ensureDept(app, 'Asset шалгаж, child asset болгож задлах.')) return;
   const dept = state.currentDept;
@@ -1054,7 +1080,39 @@ function renderAssetTab(app){
     descSel.value=''; codeInp.value=''; catInp.value=''; assetDescInp.value=''; areaSel.innerHTML='<option value="">-- сонго --</option>';
     addBtn.disabled=false; 
     addBtn.textContent=origText;
-    render();
+
+    // Render зөвхөн table section-ыг (render() биш) —  fast DOM insert
+    const mineTableWrap = document.getElementById('mine-table-wrap');
+    const mineCountEl = document.getElementById('mine-count');
+    if(mineTableWrap){
+      const mine2 = state.fatherAssets.filter(a=>a.department===dept);
+      if(mineCountEl) mineCountEl.textContent = `3. Миний Asset-ууд (${mine2.length}) → Child asset болгож задлах`;
+      const tbl = mineTableWrap.querySelector('table');
+      if(tbl){
+        const tr = document.createElement('tr');
+        tr.style.cursor='pointer';
+        tr.onmouseenter=()=>tr.style.background='var(--panel2)';
+        tr.onmouseleave=()=>tr.style.background='';
+        tr.innerHTML=`
+          <td style="font-family:var(--mono);font-size:11px"></td>
+          <td style="font-weight:500">${escapeHtml(row.name)}</td>
+          <td>${escapeHtml(row.asset_group||'')}</td>
+          <td class="link-note">${escapeHtml(row.asset_category||'')}</td>
+          <td class="link-note">${escapeHtml(row.process_area||'')}</td>
+          <td style="text-align:center;color:var(--accent2);font-weight:700">0</td>
+          <td style="text-align:center"><button class="btn ghost small" style="font-size:11px">▶ Child нэмэх</button></td>`;
+        const btn = tr.querySelector('button');
+        btn.onclick = ()=>{
+          if(!state.openAssets) state.openAssets = new Set();
+          if(state.openAssets.has(row.id)) state.openAssets.delete(row.id);
+          else state.openAssets.add(row.id);
+          render();
+        };
+        tbl.appendChild(tr);
+      }
+    } else {
+      render();
+    }
   };
   addCard.appendChild(addBtn);
   app.appendChild(addCard);
@@ -1062,21 +1120,23 @@ function renderAssetTab(app){
   // ---- Миний asset-ууд (TABLE LIST) ----
   const mine = state.fatherAssets.filter(a=>a.department===dept);
   const mineCard = card(`3. Миний Asset-ууд (${mine.length}) → Child asset болгож задлах`, 'Доорх жагсаалтаас asset сонгоод "▶ Child нэмэх" дарж child asset нэмнэ.');
+  mineCard.querySelector('h2').id = 'mine-count';
   if(mine.length===0){ mineCard.appendChild(el('div','empty','Одоогоор эзэмшдэг asset алга')); app.appendChild(mineCard); return; }
+
+  // Wrapper for fast DOM update
+  const mineTableOuter = document.createElement('div');
+  mineTableOuter.id = 'mine-table-wrap';
 
   // Search filter (if many)
   if(mine.length>5){
     const mf = document.createElement('input'); mf.type='text'; mf.placeholder='Хайх (код/нэр)...'; 
     mf.style.cssText='width:100%;margin-bottom:10px;padding:8px 10px;font-size:13px;';
-    mineCard.appendChild(mf);
+    mineTableOuter.appendChild(mf);
     
-    const mineListWrap = document.createElement('div'); mineCard.appendChild(mineListWrap);
+    const mineListWrap = document.createElement('div');
+    mineTableOuter.appendChild(mineListWrap);
     
-    function drawMine(){
-      const f=norm(mf.value);
-      const filtered=mine.filter(a=>!f||norm(a.code||'').includes(f)||norm(a.name).includes(f)||norm(a.asset_group_desc||'').includes(f));
-      mineListWrap.innerHTML='';
-      
+    function buildMineTable(list){
       const table = document.createElement('table');
       table.style.fontSize='12px';
       table.innerHTML=`<tr>
@@ -1088,14 +1148,12 @@ function renderAssetTab(app){
         <th>Child</th>
         <th></th>
       </tr>`;
-      
-      filtered.forEach(fa=>{
+      list.forEach(fa=>{
         const childCount = state.childAssets.filter(c=>c.father_id===fa.id).length;
         const tr = document.createElement('tr');
         tr.style.cursor='pointer';
         tr.onmouseenter=()=>tr.style.background='var(--panel2)';
         tr.onmouseleave=()=>tr.style.background='';
-        
         tr.innerHTML=`
           <td style="font-family:var(--mono);font-size:11px">${escapeHtml(fa.code||'')}</td>
           <td style="font-weight:500">${escapeHtml(fa.name)}</td>
@@ -1105,29 +1163,24 @@ function renderAssetTab(app){
           <td style="text-align:center;color:var(--accent2);font-weight:700">${childCount}</td>
           <td style="text-align:center">
             <button class="btn ghost small" style="font-size:11px">▶ Child нэмэх</button>
-          </td>
-        `;
-        
-        // Expand detail on button click
+          </td>`;
         const expandBtn = tr.querySelector('button');
-        expandBtn.onclick = (e)=>{
-          e.stopPropagation();
-          if(!state.openAssets) state.openAssets = new Set();
-          if(state.openAssets.has(fa.id)) state.openAssets.delete(fa.id);
-          else state.openAssets.add(fa.id);
-          render();
-        };
-        
+        expandBtn.onclick = ()=>toggleAssetDetail(fa, dept, app);
         table.appendChild(tr);
       });
-      
-      mineListWrap.appendChild(table);
+      return table;
     }
     
+    function drawMine(){
+      const f=norm(mf.value);
+      const filtered=mine.filter(a=>!f||norm(a.code||'').includes(f)||norm(a.name).includes(f)||norm(a.asset_group_desc||'').includes(f));
+      mineListWrap.innerHTML='';
+      mineListWrap.appendChild(buildMineTable(filtered));
+    }
     mf.oninput=drawMine;
     drawMine();
   } else {
-    // No search needed - show table directly
+    // No search needed
     const table = document.createElement('table');
     table.style.fontSize='12px';
     table.innerHTML=`<tr>
@@ -1139,14 +1192,12 @@ function renderAssetTab(app){
       <th>Child</th>
       <th></th>
     </tr>`;
-    
     mine.forEach(fa=>{
       const childCount = state.childAssets.filter(c=>c.father_id===fa.id).length;
       const tr = document.createElement('tr');
       tr.style.cursor='pointer';
       tr.onmouseenter=()=>tr.style.background='var(--panel2)';
       tr.onmouseleave=()=>tr.style.background='';
-      
       tr.innerHTML=`
         <td style="font-family:var(--mono);font-size:11px">${escapeHtml(fa.code||'')}</td>
         <td style="font-weight:500">${escapeHtml(fa.name)}</td>
@@ -1156,33 +1207,16 @@ function renderAssetTab(app){
         <td style="text-align:center;color:var(--accent2);font-weight:700">${childCount}</td>
         <td style="text-align:center">
           <button class="btn ghost small" style="font-size:11px">▶ Child нэмэх</button>
-        </td>
-      `;
-      
+        </td>`;
       const expandBtn = tr.querySelector('button');
-      expandBtn.onclick = (e)=>{
-        e.stopPropagation();
-        if(!state.openAssets) state.openAssets = new Set();
-        if(state.openAssets.has(fa.id)) state.openAssets.delete(fa.id);
-        else state.openAssets.add(fa.id);
-        render();
-      };
-      
+      expandBtn.onclick = ()=>toggleAssetDetail(fa, dept, app);
       table.appendChild(tr);
     });
-    
-    mineCard.appendChild(table);
+    mineTableOuter.appendChild(table);
   }
   
+  mineCard.appendChild(mineTableOuter);
   app.appendChild(mineCard);
-  
-  // ---- Expanded detail views (stacked below list) ----
-  const openAssets = state.openAssets || new Set();
-  mine.forEach(fa=>{
-    if(openAssets.has(fa.id)){
-      app.appendChild(renderFatherAssetBlock(fa, dept));
-    }
-  });
 }
 
 // ================= ITEM TAB =================
@@ -1526,7 +1560,32 @@ function renderFatherAssetBlock(fa, dept){
     toast('✅ Child asset нэмэгдлээ');
     cName.value=''; cQty.value='1';
     cBtn.disabled=false; cBtn.textContent='+ Child нэмэх';
-    render();
+
+    // DOM-д шууд нэм — render() биш
+    const newChildEl = renderChildAsset(row);
+    newChildEl.style.cssText += 'animation:fadeIn .2s ease';
+    addTitle.parentNode.insertBefore(newChildEl, addTitle);
+
+    // Child тоог table дотор шинэчил
+    const detailId = 'asset-detail-' + fa.id;
+    const detailEl = document.getElementById(detailId);
+    if(detailEl){
+      const countEl = detailEl.querySelector('.child-count-badge');
+      if(countEl) countEl.textContent = state.childAssets.filter(c=>c.father_id===fa.id).length;
+    }
+    // Mine table child тоог шинэчил
+    const mineTbl = document.getElementById('mine-table-wrap');
+    if(mineTbl){
+      const btns = mineTbl.querySelectorAll('button');
+      // find the row with this fa
+      const allTds = mineTbl.querySelectorAll('td');
+      allTds.forEach(td=>{
+        if(td.textContent===fa.name){
+          const countTd = td.closest('tr').querySelector('td:nth-child(6)');
+          if(countTd) countTd.textContent = state.childAssets.filter(c=>c.father_id===fa.id).length;
+        }
+      });
+    }
   };
   cName.onkeydown = e=>{ if(e.key==='Enter') cBtn.click(); };
   row1.append(cName, cQty, cBtn);
