@@ -839,13 +839,46 @@ function mySummaryCard(deptName){
   const nums = document.createElement('div');
   nums.style.cssText='display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:10px 0;';
   [
-    ['Father Asset', totalMyAssets, 'var(--accent)'],
-    ['Child Asset', s.childDone, 'var(--accent2)'],
-    [`Item (Spare parts)`, totalMyItems, '#f0a500'],
-  ].forEach(([label,num,color])=>{
+    ['Father Asset', totalMyAssets, 'var(--accent)', 'father'],
+    ['Child Asset', s.childDone, 'var(--accent2)', 'child'],
+    [`Item (Spare parts)`, totalMyItems, '#f0a500', 'item'],
+  ].forEach(([label,num,color,type])=>{
     const stat = document.createElement('div');
-    stat.style.cssText=`background:var(--panel);padding:14px;border-radius:8px;border-left:4px solid ${color};`;
+    stat.style.cssText=`background:var(--panel);padding:14px;border-radius:8px;border-left:4px solid ${color};cursor:pointer;transition:background .15s;`;
     stat.innerHTML=`<div style="font-size:11px;color:var(--sub);margin-bottom:4px">${label}</div><div style="font-size:28px;font-weight:700;color:${color}">${num}</div>`;
+    stat.onmouseenter=()=>stat.style.background='var(--panel2)';
+    stat.onmouseleave=()=>stat.style.background='var(--panel)';
+    stat.onclick=()=>{
+      // Toggle popup list below
+      const existingPopup = document.getElementById('stat-popup-'+type);
+      if(existingPopup){ existingPopup.remove(); return; }
+      // Remove other popups
+      document.querySelectorAll('[id^="stat-popup-"]').forEach(el3=>el3.remove());
+      const popup = document.createElement('div');
+      popup.id='stat-popup-'+type;
+      popup.style.cssText='margin-top:10px;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px;max-height:300px;overflow-y:auto;';
+      const tbl = document.createElement('table');
+      tbl.style.fontSize='11px';
+      if(type==='father'){
+        const myFA = state.fatherAssets.filter(a=>a.department===deptName);
+        tbl.innerHTML='<tr><th>Code</th><th>Description</th><th>Group</th><th>Category</th><th>Area</th></tr>'+
+          myFA.map(a=>`<tr><td style="font-family:var(--mono)">${escapeHtml(a.code||'')}</td><td>${escapeHtml(a.name)}</td><td>${escapeHtml(a.asset_group||'')}</td><td>${escapeHtml(a.asset_category||'')}</td><td>${escapeHtml(a.process_area||'')}</td></tr>`).join('');
+      } else if(type==='child'){
+        const myCA = state.childAssets.filter(x=>x.department===deptName);
+        tbl.innerHTML='<tr><th>Child Asset</th><th>Тоо</th><th>Father Asset</th></tr>'+
+          myCA.map(c2=>{
+            const fa=state.fatherAssets.find(x=>x.id===c2.father_id);
+            return `<tr><td>${escapeHtml(c2.name)}</td><td>${escapeHtml(c2.qty||'1')}</td><td>${fa?escapeHtml(fa.name):''}</td></tr>`;
+          }).join('');
+      } else {
+        const myIt = state.items.filter(it=>it.department===deptName);
+        tbl.innerHTML='<tr><th>Code</th><th>Name</th><th>UOM</th><th>Status</th></tr>'+
+          myIt.slice(0,100).map(it=>`<tr><td style="font-family:var(--mono);font-size:10px">${escapeHtml(it.code||'')}</td><td>${escapeHtml(it.name)}</td><td>${escapeHtml(it.uom||'')}</td><td>${escapeHtml(it.status||'')}</td></tr>`).join('');
+        if(myIt.length>100) tbl.innerHTML+=`<tr><td colspan="4" style="color:var(--sub)">+ ${myIt.length-100} бусад...</td></tr>`;
+      }
+      popup.appendChild(tbl);
+      c.appendChild(popup);
+    };
     nums.appendChild(stat);
   });
   c.appendChild(nums);
@@ -1752,195 +1785,173 @@ function renderMatrix(app){
     const row = document.createElement('div'); row.className='row';
     const s = document.createElement('select'); s.style.minWidth='260px';
     s.innerHTML = '<option value="">-- сонгох --</option>' + state.departments.map(d=>`<option ${state.currentDept===d.name?'selected':''} value="${escapeHtml(d.name)}">${escapeHtml(d.name)}</option>`).join('');
-    s.onchange = ()=>{ state.currentDept = s.value||null; matrixSelectedChildIds=[]; matrixSelectedItemIds=[]; render(); };
+    s.onchange = ()=>{ state.currentDept = s.value||null; render(); };
     row.appendChild(s); sel.appendChild(row); app.appendChild(sel);
   }
   if(!state.currentDept){ app.appendChild(el('div','empty','Ажиллах алба нэгжээ сонгоно уу')); return; }
 
   const dept = state.currentDept;
-
-  // ---- ТАЙЛБАР ----
-  const helpCard = card('📋 BOM — Item ↔ Asset холбох заавар', '');
-  helpCard.innerHTML += `<div style="font-size:13px;line-height:1.8;color:var(--sub)">
-    <b style="color:var(--text)">BOM (Bill of Materials)</b> — тухайн child asset-д ямар item (сэлбэг) хэд ширхэг ашиглагддагыг бүртгэнэ.<br>
-    <b style="color:var(--accent2)">Жишээ:</b> "SA Fan #1" (child asset) дотор → Bearing 6205 (2ш), V-belt A-62 (3ш), Oil seal 30×47 (1ш)<br>
-    <br>
-    <b>Алхам:</b>
-    <ol style="padding-left:18px;margin:4px 0">
-      <li>Child asset сонго (жишээ: SA Fan #1)</li>
-      <li>Тухайн asset-д хамаарах item-үүдийг хайж нэм</li>
-      <li>Тоо ширхэгийг бөглө → автоматаар хадгалагдана</li>
-    </ol>
-  </div>`;
-  app.appendChild(helpCard);
-
-  // ---- CHILD ASSET СОНГОХ ----
+  const myItems = state.items.filter(it=>it.department===dept && it.status!=='removed');
   const myChildren = state.childAssets.filter(c=>c.department===dept);
+
   if(myChildren.length===0){
-    app.appendChild(card('Child Asset байхгүй байна', '"Asset шалгах" табд asset-аа нээж child asset нэмсний дараа энд ажиллана.'));
+    app.appendChild(card('Child Asset байхгүй', '"Asset шалгах" табд asset нээж child asset нэмсний дараа энд ажиллана.'));
+  }
+
+  // ---- ITEM LIST + INLINE BOM ----
+  const listCard = card(`📋 Item → Asset холбох (${dept})`, `Item бүрийн ард "🔗 Холбох" дарж, тухайн item ямар child asset-д хэдэн ш ордогыг бичнэ. Нийт ${myItems.length} item, ${myChildren.length} child asset.`);
+
+  if(myItems.length===0){
+    listCard.appendChild(el('div','empty','"Item шалгах" табд item claim хийсний дараа энд харагдана.'));
+    app.appendChild(listCard);
     return;
   }
 
-  // Group by father asset
-  const fatherMap = {};
-  myChildren.forEach(c=>{
-    const fa = state.fatherAssets.find(x=>x.id===c.father_id);
-    const key = fa ? fa.id : 'unknown';
-    if(!fatherMap[key]) fatherMap[key]={fa, children:[]};
-    fatherMap[key].children.push(c);
-  });
+  // Search
+  const searchInp = document.createElement('input'); searchInp.type='text';
+  searchInp.placeholder='Item хайх (код/нэр/тоноглол)...';
+  searchInp.style.cssText='width:100%;margin-bottom:10px;font-size:13px;';
+  listCard.appendChild(searchInp);
 
-  const colCard = card(`1. Child Asset сонго (${dept})`, 'BOM хийх child asset-аа сонгоно уу. Father asset-аар бүлэглэсэн байна.');
-  Object.values(fatherMap).forEach(({fa, children})=>{
-    if(!fa) return;
-    const grpTitle = document.createElement('div');
-    grpTitle.style.cssText='font-size:11px;color:var(--sub);font-weight:700;margin:8px 0 4px;';
-    grpTitle.textContent=`▸ ${fa.name} (${fa.code||''})`;
-    colCard.appendChild(grpTitle);
-    const grp = document.createElement('div'); grp.style.cssText='display:flex;flex-wrap:wrap;gap:6px;margin-bottom:4px;';
-    children.forEach(c=>{
-      const lbl = document.createElement('label');
-      const isSelected = matrixSelectedChildIds.includes(c.id);
-      lbl.style.cssText=`display:flex;align-items:center;gap:5px;padding:6px 12px;border-radius:6px;font-size:12px;cursor:pointer;border:1px solid ${isSelected?'var(--accent2)':'var(--line)'};background:${isSelected?'#1a2e22':'var(--panel2)'};`;
-      const cb = document.createElement('input'); cb.type='checkbox'; cb.checked=isSelected;
-      const linkCount = state.links.filter(l=>l.child_asset_id===c.id).length;
-      cb.onchange = ()=>{
-        if(cb.checked) matrixSelectedChildIds.push(c.id);
-        else matrixSelectedChildIds = matrixSelectedChildIds.filter(x=>x!==c.id);
-        matrixSelectedItemIds=[];
-        render();
+  const listWrap = document.createElement('div');
+  listCard.appendChild(listWrap);
+
+  function drawBomList(){
+    const f=norm(searchInp.value);
+    const filtered = myItems.filter(it=>!f||norm(it.code||'').includes(f)||norm(it.name).includes(f)||norm(it.equipment||'').includes(f));
+    listWrap.innerHTML='';
+
+    const tbl = document.createElement('table');
+    tbl.style.fontSize='12px';
+    tbl.innerHTML=`<tr>
+      <th style="width:30px">#</th>
+      <th>Код</th>
+      <th>Нэр</th>
+      <th>Тоноглол</th>
+      <th>Холбосон Asset</th>
+      <th style="width:80px"></th>
+    </tr>`;
+
+    filtered.slice(0,200).forEach((it,idx)=>{
+      const myLinks = state.links.filter(l=>l.item_id===it.id);
+      const linkSummary = myLinks.map(l=>{
+        const ca = state.childAssets.find(c=>c.id===l.child_asset_id);
+        return ca ? `${ca.name} (${l.qty}ш)` : '';
+      }).filter(Boolean).join(', ');
+
+      const tr = document.createElement('tr');
+      tr.innerHTML=`
+        <td style="color:var(--sub)">${idx+1}</td>
+        <td style="font-family:var(--mono);font-size:10px;white-space:nowrap">${escapeHtml(it.code||'')}</td>
+        <td style="font-weight:500;max-width:200px">${escapeHtml(it.name)}</td>
+        <td class="link-note" style="max-width:120px">${escapeHtml(it.equipment||'')}</td>
+        <td style="font-size:11px;color:var(--accent2)">${linkSummary||'<span style="color:var(--sub)">—</span>'}</td>
+        <td><button class="btn ghost small" style="font-size:11px">🔗 Холбох</button></td>
+      `;
+
+      const btn = tr.querySelector('button');
+      btn.onclick = ()=>{
+        // Toggle inline BOM editor
+        const existingRow = document.getElementById('bom-edit-'+it.id);
+        if(existingRow){ existingRow.remove(); return; }
+        // Remove other open editors
+        document.querySelectorAll('[id^="bom-edit-"]').forEach(el3=>el3.remove());
+
+        const editRow = document.createElement('tr');
+        editRow.id = 'bom-edit-'+it.id;
+        const editTd = document.createElement('td');
+        editTd.colSpan = 6;
+        editTd.style.cssText='background:var(--panel2);padding:12px;';
+
+        // Build inline BOM editor
+        let editHtml = '<div style="font-size:12px;font-weight:600;margin-bottom:8px">📦 ' + escapeHtml(it.name) + ' — ямар child asset-д хэдэн ш?</div>';
+        editHtml += '<div style="display:grid;grid-template-columns:1fr 80px 60px;gap:6px;align-items:center;font-size:11px;color:var(--sub);margin-bottom:4px"><span>Child Asset</span><span>Тоо ш</span><span></span></div>';
+
+        editTd.innerHTML = editHtml;
+
+        // Group children by father asset
+        const fatherMap = {};
+        myChildren.forEach(c2=>{
+          const fa=state.fatherAssets.find(x=>x.id===c2.father_id);
+          const key = fa ? fa.id : 'unknown';
+          if(!fatherMap[key]) fatherMap[key]={fa, children:[]};
+          fatherMap[key].children.push(c2);
+        });
+
+        Object.values(fatherMap).forEach(({fa, children})=>{
+          if(!fa) return;
+          const grpLbl = document.createElement('div');
+          grpLbl.style.cssText='font-size:10px;color:var(--sub);font-weight:700;margin:6px 0 2px;padding-top:4px;border-top:1px solid var(--line);';
+          grpLbl.textContent = '▸ ' + fa.name;
+          editTd.appendChild(grpLbl);
+
+          children.forEach(c2=>{
+            const existingLink = state.links.find(l=>l.child_asset_id===c2.id && l.item_id===it.id);
+            const row2 = document.createElement('div');
+            row2.style.cssText='display:grid;grid-template-columns:1fr 80px 60px;gap:6px;align-items:center;margin-bottom:4px;';
+            
+            const nameSpan = document.createElement('span');
+            nameSpan.style.cssText='font-size:12px;';
+            nameSpan.textContent = c2.name;
+            
+            const qtyInp = document.createElement('input');
+            qtyInp.type='number'; qtyInp.min='0';
+            qtyInp.style.cssText='width:70px;text-align:center;font-size:13px;font-weight:700;padding:4px;';
+            qtyInp.value = existingLink ? (existingLink.qty||'') : '';
+            qtyInp.placeholder='0';
+            if(existingLink && existingLink.qty) qtyInp.style.background='#1a2e22';
+
+            const saveBtn = document.createElement('button');
+            saveBtn.className='btn ghost small';
+            saveBtn.textContent='💾';
+            saveBtn.style.fontSize='14px';
+
+            qtyInp.onchange = saveBtn.onclick = async ()=>{
+              const val = qtyInp.value.trim();
+              let link = state.links.find(l=>l.child_asset_id===c2.id && l.item_id===it.id);
+              if(!val || val==='0'){
+                if(link){ await dbDelete('links',link.id); state.links=state.links.filter(x=>x.id!==link.id); }
+                qtyInp.style.background='';
+                toast('✅ Холболт хасагдлаа');
+              } else if(link){
+                link.qty=val; await dbUpdate('links',link.id,{qty:val});
+                qtyInp.style.background='#1a2e22';
+                toast('✅ Тоо шинэчлэгдлээ');
+              } else {
+                const newRow={id:uid(),child_asset_id:c2.id,item_id:it.id,qty:val,verified:false,corr_category:'',corr_min:'',corr_max:'',corr_uom:''};
+                await dbInsert('links',newRow); state.links.push(newRow);
+                qtyInp.style.background='#1a2e22';
+                toast('✅ Холболт нэмэгдлээ');
+              }
+              // Update summary in main row
+              const newLinks = state.links.filter(l=>l.item_id===it.id);
+              const newSummary = newLinks.map(l=>{
+                const ca2=state.childAssets.find(c3=>c3.id===l.child_asset_id);
+                return ca2 ? `${ca2.name} (${l.qty}ш)` : '';
+              }).filter(Boolean).join(', ');
+              const summTd = tr.querySelector('td:nth-child(5)');
+              if(summTd) summTd.innerHTML = newSummary || '<span style="color:var(--sub)">—</span>';
+            };
+
+            row2.append(nameSpan, qtyInp, saveBtn);
+            editTd.appendChild(row2);
+          });
+        });
+
+        editRow.appendChild(editTd);
+        tr.parentNode.insertBefore(editRow, tr.nextSibling);
       };
-      lbl.append(cb, document.createTextNode(`${c.name} ${linkCount>0?`(${linkCount} item)`:''}`));
-      grp.appendChild(lbl);
-    });
-    colCard.appendChild(grp);
-  });
-  app.appendChild(colCard);
 
-  if(matrixSelectedChildIds.length===0){
-    app.appendChild(el('div','empty','Дор хаяж 1 child asset сонгоно уу'));
-    return;
+      tbl.appendChild(tr);
+    });
+
+    if(filtered.length>200) listWrap.appendChild(el('div','link-note',`+ ${filtered.length-200} бусад...`));
+    listWrap.appendChild(tbl);
   }
 
-  const selectedChildren = myChildren.filter(c=>matrixSelectedChildIds.includes(c.id));
-
-  // ---- ITEM ХАЙХ & НЭМЭХ ----
-  const itemCard = card('2. Item хайж нэм', 'Энэ child asset-д хамаарах сэлбэгүүдийг хайж нэмнэ үү. Тухайн алба нэгжийн item-үүд эхэлж гарна.');
-  const searchWrap = document.createElement('div'); searchWrap.style.position='relative';
-  const sIn = document.createElement('input'); sIn.type='text';
-  sIn.placeholder='Item код/нэр/тоноглолоор хайх...';
-  sIn.style.cssText='width:100%;font-size:13px;';
-  const results = document.createElement('div');
-  results.style.cssText='position:absolute;top:36px;left:0;right:0;background:var(--panel);border:1px solid var(--line);border-radius:6px;z-index:100;max-height:240px;overflow-y:auto;display:none;';
-  sIn.oninput = ()=>{
-    const f = norm(sIn.value);
-    if(!f){ results.style.display='none'; return; }
-    // My dept items first, then others
-    const myItems = state.items.filter(it=>it.status!=='removed'&&it.department===dept&&(norm(it.code).includes(f)||norm(it.name).includes(f)||norm(it.equipment||'').includes(f)));
-    const otherItems = state.items.filter(it=>it.status!=='removed'&&it.department!==dept&&(norm(it.code).includes(f)||norm(it.name).includes(f)||norm(it.equipment||'').includes(f)));
-    const matches = [...myItems, ...otherItems].slice(0,30);
-    results.innerHTML='';
-    if(matches.length===0){ results.innerHTML='<div style="padding:8px;color:var(--sub)">Олдсонгүй</div>'; }
-    matches.forEach(it=>{
-      const d = document.createElement('div');
-      d.style.cssText='padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--line);font-size:12px;';
-      d.onmouseenter=()=>d.style.background='var(--panel2)';
-      d.onmouseleave=()=>d.style.background='';
-      d.innerHTML=`<span style="font-family:var(--mono);font-size:11px;color:var(--sub)">${escapeHtml(it.code)}</span> <strong>${escapeHtml(it.name)}</strong>${it.equipment?` <span style="color:var(--sub)">/ ${escapeHtml(it.equipment)}</span>`:''}`;
-      d.onclick = ()=>{
-        if(!matrixSelectedItemIds.includes(it.id)) matrixSelectedItemIds.push(it.id);
-        sIn.value=''; results.style.display='none'; render();
-      };
-      results.appendChild(d);
-    });
-    results.style.display='block';
-  };
-  document.addEventListener('click', (e)=>{ if(!searchWrap.contains(e.target)) results.style.display='none'; }, {once:false});
-  searchWrap.append(sIn, results);
-  itemCard.appendChild(searchWrap);
-  app.appendChild(itemCard);
-
-  // ---- BOM ХҮСНЭГТ ----
-  const bomCard = card('3. BOM бөглөх — тоо ширхэг', `Сонгосон child asset: ${selectedChildren.map(c=>c.name).join(', ')}`);
-
-  if(matrixSelectedItemIds.length===0){
-    bomCard.appendChild(el('div','link-note','↑ Дээр item хайж нэмнэ үү'));
-    app.appendChild(bomCard);
-    return;
-  }
-
-  const selectedItems = state.items.filter(it=>matrixSelectedItemIds.includes(it.id));
-  const table = document.createElement('table');
-  table.style.fontSize='12px';
-
-  // Header
-  const hRow = document.createElement('tr');
-  hRow.innerHTML=`<th style="text-align:left">Item (Сэлбэг)</th>`;
-  selectedChildren.forEach(c=>{
-    const fa=state.fatherAssets.find(x=>x.id===c.father_id);
-    hRow.innerHTML+=`<th style="text-align:center;min-width:80px">${escapeHtml(c.name)}<br><span style="font-weight:400;font-size:10px;color:var(--sub)">${fa?escapeHtml(fa.name):''}</span></th>`;
-  });
-  hRow.innerHTML+=`<th></th>`;
-  table.appendChild(hRow);
-
-  selectedItems.forEach(it=>{
-    const tr = document.createElement('tr');
-    // Item info
-    const tdName = document.createElement('td');
-    const u=getUnspsc(it.code)||{};
-    tdName.innerHTML=`
-      <div><strong>${escapeHtml(it.name)}</strong></div>
-      <div style="font-family:var(--mono);font-size:10px;color:var(--sub)">${escapeHtml(it.code)}</div>
-      ${it.equipment?`<div style="font-size:10px;color:var(--sub)">${escapeHtml(it.equipment)}</div>`:''}
-      ${u.commodity?`<div style="font-size:10px;color:var(--accent2)">${escapeHtml(u.commodity)}</div>`:''}`;
-    tr.appendChild(tdName);
-
-    // Qty cells per child asset
-    selectedChildren.forEach(c=>{
-      const td = document.createElement('td'); td.style.textAlign='center';
-      const existing = state.links.find(l=>l.child_asset_id===c.id&&l.item_id===it.id);
-      const inp = document.createElement('input');
-      inp.type='number'; inp.min='0';
-      inp.style.cssText='width:70px;text-align:center;font-size:14px;font-weight:700;';
-      inp.value = existing?(existing.qty||''):'';
-      inp.placeholder='0';
-      if(existing&&existing.qty) inp.style.background='#1a2e22';
-      inp.onchange = async ()=>{
-        const val=inp.value.trim();
-        let link=state.links.find(l=>l.child_asset_id===c.id&&l.item_id===it.id);
-        if(!val||val==='0'){
-          if(link){ await dbDelete('links',link.id); state.links=state.links.filter(x=>x.id!==link.id); }
-          inp.style.background=''; return;
-        }
-        if(link){ link.qty=val; await dbUpdate('links',link.id,{qty:val}); }
-        else {
-          const row={id:uid(),child_asset_id:c.id,item_id:it.id,qty:val,verified:false,corr_category:'',corr_min:'',corr_max:'',corr_uom:''};
-          await dbInsert('links',row); state.links.push(row);
-        }
-        inp.style.background='#1a2e22';
-      };
-      td.appendChild(inp);
-      tr.appendChild(td);
-    });
-
-    // Remove row button
-    const tdRm=document.createElement('td');
-    const rmBtn=document.createElement('button'); rmBtn.className='btn ghost small'; rmBtn.textContent='×';
-    rmBtn.onclick=()=>{matrixSelectedItemIds=matrixSelectedItemIds.filter(x=>x!==it.id); render();};
-    tdRm.appendChild(rmBtn);
-    tr.appendChild(tdRm);
-    table.appendChild(tr);
-  });
-
-  bomCard.appendChild(table);
-
-  // Summary
-  const totalLinks = state.links.filter(l=>selectedChildren.some(c=>c.id===l.child_asset_id)).length;
-  const summ=document.createElement('div');
-  summ.style.cssText='margin-top:10px;font-size:12px;color:var(--sub);';
-  summ.textContent=`Нийт ${totalLinks} холболт хадгалагдсан байна. Утга оруулбал автоматаар хадгалагдана.`;
-  bomCard.appendChild(summ);
-  app.appendChild(bomCard);
+  searchInp.oninput = drawBomList;
+  drawBomList();
+  app.appendChild(listCard);
 }
 
 // ================= GUIDE TAB =================
