@@ -538,6 +538,63 @@ function renderAdmin(app){
   
   app.appendChild(dash);
 
+  // ===== DEPARTMENT DETAIL TABLE =====
+  const detailCard = card('📋 Алба нэгж бүрийн ДЭЛГЭРЭНГҮЙ статус', 'Asset, Child, Item тоо, баталгаажуулсан хувь');
+  const detailTable = document.createElement('table');
+  detailTable.style.cssText='width:100%;font-size:12px;';
+  detailTable.innerHTML=`<tr>
+    <th style="text-align:left">Алба нэгж</th>
+    <th>Father Asset</th>
+    <th>Child Asset</th>
+    <th>Item нийт</th>
+    <th>Item идэвхтэй %</th>
+    <th>Item хасах</th>
+    <th>Холболт</th>
+    <th>Дуусгал %</th>
+  </tr>`;
+
+  state.departments.forEach(d=>{
+    const s = deptProgressStatus(d.name);
+    const myFa = state.fatherAssets.filter(a=>a.department===d.name);
+    const myCa = state.childAssets.filter(c=>c.department===d.name);
+    const myIt = state.items.filter(it=>it.department===d.name);
+    const activeIt = myIt.filter(it=>it.status==='active').length;
+    const removeIt = myIt.filter(it=>it.status==='removed'||it.status==='remove_pending').length;
+    const links = state.links.filter(l=>
+      (l.father_asset_id && state.fatherAssets.find(a=>a.id===l.father_asset_id&&a.department===d.name)) ||
+      (l.child_asset_id && state.childAssets.find(c=>c.id===l.child_asset_id&&c.department===d.name))
+    ).length;
+    
+    const steps = [s.step1,s.step2,s.step3,s.step4,s.step5];
+    const donePct = Math.round(steps.filter(Boolean).length/5*100);
+    const activePct = myIt.length>0 ? Math.round(activeIt/myIt.length*100) : 0;
+
+    const tr = document.createElement('tr');
+    tr.style.borderBottom='1px solid var(--line)';
+    tr.innerHTML=`
+      <td style="font-weight:500;padding:8px">${escapeHtml(d.name)}</td>
+      <td style="text-align:center;padding:8px"><strong>${myFa.length}</strong></td>
+      <td style="text-align:center;padding:8px"><strong style="color:var(--accent2)">${myCa.length}</strong></td>
+      <td style="text-align:center;padding:8px"><strong>${myIt.length}</strong></td>
+      <td style="text-align:center;padding:8px">
+        <div style="background:${activePct>=80?'#1a3a2e':activePct>=50?'#2a3a1a':'#3a2226'};padding:4px 8px;border-radius:4px;font-size:11px;font-weight:700;color:${activePct>=80?'var(--accent2)':activePct>=50?'#f0a500':'var(--danger)'}">
+          ${activeIt}/${myIt.length} (${activePct}%)
+        </div>
+      </td>
+      <td style="text-align:center;padding:8px">${removeIt>0?`<span style="color:var(--danger);font-weight:700">${removeIt}</span>`:'—'}</td>
+      <td style="text-align:center;padding:8px"><span style="color:var(--accent)">${links}</span></td>
+      <td style="text-align:center;padding:8px">
+        <div style="background:${donePct===100?'#1a3a2e':donePct>=60?'#2a3a1a':'#3a2226'};padding:4px 8px;border-radius:4px;font-weight:700;font-size:11px;color:${donePct===100?'var(--accent2)':donePct>=60?'#f0a500':'var(--danger)'}">
+          ${donePct}%
+        </div>
+      </td>
+    `;
+    detailTable.appendChild(tr);
+  });
+
+  detailCard.appendChild(detailTable);
+  app.appendChild(detailCard);
+
   // Item status overview
   const itemStat = card('Item-ийн ерөнхий байдал', 'Алба нэгжид хуваарилагдаагүй, баталгаажсан болон хасахаар санал болгосон item-ийн тоо.');
   const totalItems = state.items.length;
@@ -710,6 +767,14 @@ function detectStatus(note){
 }
 
 async function runImport(kind, mapping, rows){
+  // Warn users about import
+  const confirmed = confirm(`⚠️ ${kind==='father'?'Father Asset':'Item'} импортлох гэж байна!\n\nЭнэ хугацаанд бусад эзэмшигчид ашиглахгүйгээр хүлээнэ үү.\n\nҮргэлжүүлэх үү?\n\n(${rows.length} мөр орох ёстой)`);
+  if(!confirmed) return;
+
+  // Disable all import buttons during import
+  document.querySelectorAll('input[type="file"]').forEach(f=>f.disabled=true);
+  document.querySelectorAll('button').forEach(b=>{ if(b.textContent.includes('Импортлох')) b.disabled=true; });
+
   const BATCH = 300;
   if(kind==='father'){
     const existingCodes = new Set(state.fatherAssets.map(a=>a.code));
