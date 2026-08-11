@@ -1466,7 +1466,7 @@ function renderItemTab(app){
           <td style="color:var(--sub);font-size:10px">${it.note?'📝':''}</td>`;
         t.appendChild(tr);
       });
-      tableWrap.innerHTML=''; tableWrap.appendChild(t);
+      tableWrap.appendChild(t);
       if(filtered.length>200) tableWrap.appendChild(el('div','link-note',`+ дахин ${filtered.length-200} мөр, хайлтаа нарийсга`));
 
       // Inline edit handlers
