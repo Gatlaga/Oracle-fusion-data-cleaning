@@ -170,6 +170,23 @@ const ADMIN_PASSWORD = "Admin2026#"; // Гана та энэ нууц үгээр
 
 let session = { role: null, deptName: null }; // role: 'admin' | 'manager'
 
+// Load session from localStorage
+function loadSession(){
+  const saved = localStorage.getItem('session');
+  if(saved){
+    try { session = JSON.parse(saved); }
+    catch(e){ session = { role: null, deptName: null }; }
+  }
+}
+
+// Save session to localStorage
+function saveSession(){
+  localStorage.setItem('session', JSON.stringify(session));
+}
+
+// Initialize session on load
+loadSession();
+
 let state = {
   departments: [],   // {id, name}
   fatherAssets: [],  // {id, code, name, department, source}
@@ -278,6 +295,7 @@ function renderLogin(){
         const dept = state.departments.find(d=>d.name===dname);
         if(!dept || (dept.password||'') !== pwd.value){ err.textContent='Нууц үг буруу байна'; return; }
         session = { role:'manager', deptName:dname };
+        saveSession();
         state.currentDept = dname;
         state.currentTab = 'asset';
         render();
@@ -291,6 +309,7 @@ function renderLogin(){
       btn.onclick = ()=>{
         if(pwd.value !== ADMIN_PASSWORD){ err.textContent='Нууц үг буруу байна'; return; }
         session = { role:'admin', deptName:null };
+        saveSession();
         state.currentTab = 'admin';
         render();
       };
@@ -325,7 +344,7 @@ function renderNav(){
   lo.className = 'logout-btn';
   lo.innerHTML = `<span style="opacity:.7">${session.role==='admin'?'Админ':session.deptName}</span> · Гарах`;
   lo.style.marginLeft = '8px';
-  lo.onclick = ()=>{ if(confirm('Гарах уу?')){ session={role:null,deptName:null}; state.currentDept=null; render(); } };
+  lo.onclick = ()=>{ if(confirm('Гарах уу?')){ session={role:null,deptName:null}; saveSession(); state.currentDept=null; render(); } };
   nav.appendChild(lo);
 }
 
@@ -879,7 +898,9 @@ function renderAssetTab(app){
         b.onclick = async ()=>{
           const it = state.fatherAssets.find(x=>x.id===b.dataset.id);
           await dbUpdate('father_assets', it.id, {department:dept});
-          it.department=dept; render();
+          it.department=dept; 
+          toast('✅ Asset авлаа');
+          render();
         };
       });
       if(filtered.length>200) listWrap.appendChild(el('div','link-note',`+ дахин ${filtered.length-200} мөр, хайлтаа нарийсга`));
@@ -1268,6 +1289,7 @@ function renderItemTab(app){
           }
           it2[field]=val;
           await dbUpdate('items', id, {[field]:val});
+          toast('✅ Item өөрчлөгдлөө');
           if(field==='status') drawItemTable(); // refresh status colors
         };
       });
@@ -1312,7 +1334,10 @@ function renderItemTab(app){
       t.querySelectorAll('button[data-id]').forEach(b=>{
         b.onclick=async()=>{
           const it2=state.items.find(x=>x.id===b.dataset.id);
-          await dbUpdate('items',it2.id,{department:dept}); it2.department=dept; render();
+          await dbUpdate('items',it2.id,{department:dept}); 
+          it2.department=dept; 
+          toast('✅ Item авлаа');
+          render();
         };
       });
       if(filtered.length>200) listWrap.appendChild(el('div','link-note',`+ дахин ${filtered.length-200} мөр`));
@@ -1493,11 +1518,12 @@ function renderFatherAssetBlock(fa, dept){
   cBtn.onclick = async ()=>{
     const nm = cName.value.trim();
     if(!nm){ toast('Child asset-н нэрийг бичнэ үү'); cName.focus(); return; }
-    cBtn.disabled=true; cBtn.textContent='Хадгалж байна...';
+    cBtn.disabled=true; cBtn.textContent='⏳ Хадгалж байна...';
     const row = { id:uid(), father_id:fa.id, name:nm, qty:cQty.value||'1', department:dept };
     const {error} = await sb.from('child_assets').insert(row);
-    if(error){ toast('Алдаа: '+error.message); cBtn.disabled=false; cBtn.textContent='+ Child нэмэх'; return; }
+    if(error){ toast('❌ Алдаа: '+error.message); cBtn.disabled=false; cBtn.textContent='+ Child нэмэх'; return; }
     state.childAssets.push(row);
+    toast('✅ Child asset нэмэгдлээ');
     cName.value=''; cQty.value='1';
     cBtn.disabled=false; cBtn.textContent='+ Child нэмэх';
     render();
