@@ -1049,15 +1049,22 @@ function renderAssetTab(app){
   assetDescDiv.append(assetDescLbl, assetDescInp);
   grid.appendChild(assetDescDiv);
 
-  // 5. Process Area (AUTO-FILL FROM LOOKUP)
+  // 5. Process Area (AUTO-FILL FROM LOOKUP + manual option)
   const areaDiv = document.createElement('div');
   const areaLbl = document.createElement('label');
-  areaLbl.textContent = 'Process Area (автоматаар) *';
+  areaLbl.textContent = 'Process Area *';
   areaLbl.style.cssText='font-size:11px;color:var(--sub);display:block;margin-bottom:3px;font-weight:700;';
   const areaSel = document.createElement('select');
   areaSel.style.width='100%';
   areaSel.innerHTML = '<option value="">-- сонго --</option>';
-  areaDiv.append(areaLbl, areaSel);
+  const areaManualInp = document.createElement('input');
+  areaManualInp.type='text'; areaManualInp.placeholder='Гараар бичих...';
+  areaManualInp.style.cssText='width:100%;margin-top:4px;display:none;';
+  areaSel.onchange = ()=>{
+    if(areaSel.value==='__manual__'){ areaManualInp.style.display=''; areaManualInp.focus(); }
+    else { areaManualInp.style.display='none'; areaManualInp.value=''; }
+  };
+  areaDiv.append(areaLbl, areaSel, areaManualInp);
   grid.appendChild(areaDiv);
 
   // AUTO-FILL LOGIC
@@ -1079,7 +1086,9 @@ function renderAssetTab(app){
 
     // Set Process Area dropdown
     areaSel.innerHTML = '<option value="">-- сонго --</option>' +
-      (lookup.process_areas || []).map(pa=>`<option value="${escapeHtml(pa)}">${escapeHtml(pa)}</option>`).join('');
+      (lookup.process_areas || []).map(pa=>`<option value="${escapeHtml(pa)}">${escapeHtml(pa)}</option>`).join('') +
+      '<option value="__manual__">✏️ Бусад (гараар бичих)</option>';
+    areaManualInp.style.display='none'; areaManualInp.value='';
     
     // Auto-select first process area if only one
     if(lookup.process_areas && lookup.process_areas.length === 1){
@@ -1103,7 +1112,8 @@ function renderAssetTab(app){
     if(!validateEmpty(codeInp.value, 'Asset Group Code')) return;
     if(!validateEmpty(catInp.value, 'Asset Category')) return;
     if(!validateEmpty(assetDescInp.value, 'Asset Description')) { assetDescInp.focus(); return; }
-    if(!validateEmpty(areaSel.value, 'Process Area')) { areaSel.focus(); return; }
+    const finalArea = areaSel.value==='__manual__' ? areaManualInp.value.trim() : areaSel.value.trim();
+    if(!validateEmpty(finalArea, 'Process Area')) { areaSel.focus(); return; }
 
     addBtn.disabled=true; 
     const origText = addBtn.textContent;
@@ -1116,7 +1126,7 @@ function renderAssetTab(app){
       asset_group: codeInp.value.trim(),
       asset_group_desc: descSel.value.trim(),
       asset_category: catInp.value.trim(),
-      process_area: areaSel.value.trim(),
+      process_area: finalArea,
       department: dept,
       source: 'manual'
     };
@@ -1327,6 +1337,29 @@ function renderItemTab(app){
       });
       const statusLabel={active:'✓ Идэвхтэй',removed:'✕ Устгасан',remove_pending:'! Хасах санал',needs_review:'? Шалгаагүй'};
       const statusColor={active:'var(--accent2)',removed:'var(--danger)',remove_pending:'#f0a500',needs_review:'var(--sub)'};
+      if(!state.itemPage) state.itemPage = 0;
+      const PAGE_SIZE = 200;
+      const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+      const page = Math.min(state.itemPage, totalPages - 1);
+      const pageItems = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+
+      // Pagination controls
+      if(filtered.length > PAGE_SIZE){
+        const pgWrap = document.createElement('div');
+        pgWrap.style.cssText='display:flex;gap:8px;align-items:center;margin-bottom:8px;font-size:12px;';
+        const prevBtn = document.createElement('button'); prevBtn.className='btn ghost small';
+        prevBtn.textContent='◀ Өмнөх'; prevBtn.disabled = page===0;
+        prevBtn.onclick=()=>{ state.itemPage = Math.max(0, page-1); drawItemTable(); };
+        const info = document.createElement('span');
+        info.style.color='var(--sub)';
+        info.textContent=`${page*PAGE_SIZE+1}–${Math.min((page+1)*PAGE_SIZE, filtered.length)} / ${filtered.length}`;
+        const nextBtn = document.createElement('button'); nextBtn.className='btn ghost small';
+        nextBtn.textContent='Дараах ▶'; nextBtn.disabled = page >= totalPages-1;
+        nextBtn.onclick=()=>{ state.itemPage = Math.min(totalPages-1, page+1); drawItemTable(); };
+        pgWrap.append(prevBtn, info, nextBtn);
+        itemListWrap.appendChild(pgWrap);
+      }
+
       const t = document.createElement('table');
       t.style.fontSize='12px';
       t.innerHTML=`<tr>
@@ -1335,12 +1368,12 @@ function renderItemTab(app){
         <th>Segment</th><th>Family</th><th>Class</th><th>Commodity (UNSPSC)</th>
         <th>Төлөв</th><th></th>
       </tr>`;
-      filtered.slice(0,300).forEach((it,idx)=>{
+      pageItems.forEach((it,idx)=>{
         const u = getUnspsc(it.code) || {};
         const tr = document.createElement('tr');
         const stColor = statusColor[it.status]||'var(--sub)';
         tr.innerHTML=`
-          <td style="color:var(--sub)">${idx+1}</td>
+          <td style="color:var(--sub)">${page*PAGE_SIZE+idx+1}</td>
           <td style="font-family:var(--mono);white-space:nowrap;font-size:11px">${escapeHtml(it.code)}</td>
           <td><input type="text" value="${escapeHtml(it.name||'')}" style="width:180px" data-id="${it.id}" data-field="name"></td>
           <td><input type="text" value="${escapeHtml(it.spec||'')}" style="width:120px" data-id="${it.id}" data-field="spec" placeholder="Үзүүлэлт"></td>
@@ -1858,13 +1891,26 @@ function renderMatrix(app){
         editTd.innerHTML = '<div style="font-size:13px;font-weight:700;margin-bottom:10px">\u{1F4E6} '+escapeHtml(it.name)+'</div>'+
           '<div style="font-size:11px;color:var(--sub);margin-bottom:8px">Father болон Child asset аль алинд холбож болно. Тоо бичээд \u{1F4BE} дарна.</div>';
 
-        // FATHER ASSETS
+        // FATHER ASSETS with search
         const faTitle = document.createElement('div');
         faTitle.style.cssText='font-size:12px;font-weight:700;color:var(--accent);margin:6px 0 4px;';
         faTitle.textContent='\u{1F3ED} Father Asset';
         editTd.appendChild(faTitle);
 
-        myFathers.forEach(fa=>{
+        const faSearch = document.createElement('input'); faSearch.type='text';
+        faSearch.placeholder='Asset нэрээр хайх...';
+        faSearch.style.cssText='width:100%;margin-bottom:6px;font-size:12px;padding:5px 8px;';
+        editTd.appendChild(faSearch);
+
+        const faListWrap = document.createElement('div');
+        faListWrap.style.cssText='max-height:250px;overflow-y:auto;';
+        editTd.appendChild(faListWrap);
+
+        function drawFaList(){
+          const q = norm(faSearch.value);
+          const filteredFa = myFathers.filter(fa=>!q||norm(fa.name).includes(q)||norm(fa.code||'').includes(q)||norm(fa.process_area||'').includes(q));
+          faListWrap.innerHTML='';
+          filteredFa.forEach(fa=>{
           const eLink = state.links.find(l=>l.father_asset_id===fa.id && l.item_id===it.id);
           const r2 = document.createElement('div');
           r2.style.cssText='display:grid;grid-template-columns:1fr 90px 70px 40px;gap:6px;align-items:center;margin-bottom:3px;';
@@ -1897,8 +1943,11 @@ function renderMatrix(app){
             if(st) st.innerHTML=linkSummaryHtml(it.id);
           }
           qi.onchange=saveFa; sb2.onclick=saveFa;
-          r2.append(nm,ar,qi,sb2); editTd.appendChild(r2);
+          r2.append(nm,ar,qi,sb2); faListWrap.appendChild(r2);
         });
+        }
+        faSearch.oninput = drawFaList;
+        drawFaList();
 
         // CHILD ASSETS
         if(myChildren.length>0){
@@ -1989,19 +2038,42 @@ function renderGuide(app){
   steps.innerHTML += stepsHtml;
   app.appendChild(steps);
 
-  const rule = card('Asset задлах дүрэм — хаана зогсох вэ?', 'Зогсох цэг = "Maintainable Item" түвшин.');
+  const rule = card('Asset задлах дүрэм — хаана зогсох вэ?', 'Father Asset → Child Asset задлах зарчим.');
   rule.innerHTML += `
-    <div style="font-size:13px;line-height:1.8">
-    Доорх 3 асуултын ядаж нэгэнд нь <b>"Тийм"</b> бол зөв түвшин — цаашид бүү задал:
-    <ol style="padding-left:20px">
-      <li>Үүнд тусад нь сэлбэг/item захиалж холбодог уу?</li>
-      <li>Энэ өөрөө бие даан эвдэрч, тусад нь засвар/PM хийдэг үү?</li>
-      <li>Үүнд тусад нь criticality (чухал зэрэг), тоолуур өгдөг үү?</li>
+    <div style="font-size:13px;line-height:1.9">
+    <b>Зогсох цэг</b> = "Maintainable Item" түвшин — бие даан засвар хийгддэг тоног төхөөрөмж.<br><br>
+    <b>Доорх 3 асуултаар шалга:</b><br>
+    Father asset-н доторх тоног төхөөрөмж бүрийн хувьд:
+    <ol style="padding-left:20px;margin:8px 0">
+      <li><b>Сэлбэг захиалдаг уу?</b> — Энэ тоноглолд зориулж тусдаа bearing, seal, belt, filter гэх мэт сэлбэг (item) захиалдаг бол → <span style="color:var(--accent2)">ТИЙМ → Child asset болгоно</span></li>
+      <li><b>Бие даан эвдэрч, тусдаа засварлагддаг уу?</b> — Энэ эвдэрвэл бусдыг зогсоохгүйгээр тусад нь засварладаг бол → <span style="color:var(--accent2)">ТИЙМ → Child asset болгоно</span></li>
+      <li><b>Тусдаа PM (засвар үйлчилгээ) хуваарь, criticality, тоолуур байдаг уу?</b> — Ажлын цагийг хянадаг, PM тусдаа хийдэг бол → <span style="color:var(--accent2)">ТИЙМ → Child asset болгоно</span></li>
     </ol>
-    <div style="background:#20362a;padding:8px 12px;border-radius:6px;margin:6px 0"><b style="color:var(--accent2)">ЗӨВ:</b> Насос систем → Насос #401, #402, #403 (тус бүр өөрийн сэлбэгтэй, тусад нь эвдэрдэг).</div>
-    <div style="background:#3a2226;padding:8px 12px;border-radius:6px;margin:6px 0"><b style="color:var(--danger)">БУРУУ (хэт гүн):</b> Насос #401 → Adapter → Bolt. Bolt бол ITEM, тусдаа asset болгохгүй.</div>
-    <div style="background:#3a2226;padding:8px 12px;border-radius:6px;margin:6px 0"><b style="color:var(--danger)">БУРУУ (хэт өнгөц):</b> Бүх насосыг нэг "Насос систем" болгож нэгтгэх — аль нь эвдэрснийг ялгахгүй болно.</div>
-    <b>Энгийн шалгуур:</b> "Үүнийг сольж/засварлахдаа СЭЛБЭГ ЗАХИАЛДАГ уу? Тийм бол child asset. Зөвхөн бүхэлдээ солигддог жижиг эд анги бол ITEM."
+    <b>Нэг ч "Тийм" байхгүй бол</b> → Child asset болгохгүй, харин ITEM (сэлбэг) хэлбэрээр бүртгэнэ.<br><br>
+
+    <div style="background:#20362a;padding:10px 14px;border-radius:6px;margin:8px 0">
+      <b style="color:var(--accent2)">✅ ЗӨВ жишээ:</b><br>
+      <span style="color:var(--sub)">Father:</span> Centrifugal fan|Boiler 3|SA fan<br>
+      <span style="color:var(--sub)">Child-ууд:</span> SA Fan Motor #1, SA Fan Motor #2, SA Fan Impeller<br>
+      <span style="color:var(--sub)">Тайлбар:</span> Мотор бүр тусдаа bearing, seal-тэй, тусдаа эвдэрч, PM-д тусад нь ордог.
+    </div>
+    <div style="background:#3a2226;padding:10px 14px;border-radius:6px;margin:8px 0">
+      <b style="color:var(--danger)">❌ БУРУУ (хэт гүн задалсан):</b><br>
+      Насос → Adapter → Bolt → Nut<br>
+      <span style="color:var(--sub)">Bolt, Nut нь ITEM (сэлбэг). Тусдаа засварлагддаггүй, зөвхөн солигддог.</span>
+    </div>
+    <div style="background:#3a2226;padding:10px 14px;border-radius:6px;margin:8px 0">
+      <b style="color:var(--danger)">❌ БУРУУ (хэт өнгөц):</b><br>
+      "Насос систем" гэж бүгдийг нэгтгэх<br>
+      <span style="color:var(--sub)">Аль насос эвдэрснийг ялгахгүй. Насос тус бүрийг child asset болгоно.</span>
+    </div>
+
+    <div style="background:var(--panel2);padding:10px 14px;border-radius:6px;margin:8px 0;border-left:3px solid var(--accent)">
+      <b>📏 Энгийн шалгуур:</b><br>
+      "Үүнийг <u>сольж/засварлахдаа</u> сэлбэг захиалдаг уу?"<br>
+      → <b>Тийм</b> бол <span style="color:var(--accent2)">Child Asset</span><br>
+      → <b>Үгүй, зөвхөн бүхэлдээ солигддог</b> бол <span style="color:#f0a500">Item (сэлбэг)</span>
+    </div>
     </div>`;
   app.appendChild(rule);
 
