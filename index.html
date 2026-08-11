@@ -209,14 +209,21 @@ function toast(msg){
 async function loadAll(){
   if(!sb){ renderSetupScreen(); return; }
   try{
+    // Supabase default limit is 1000; use range to get more
     const [d,f,c,i,l] = await Promise.all([
       sb.from('departments').select('*'),
-      sb.from('father_assets').select('*').limit(10000),
-      sb.from('child_assets').select('*').limit(10000),
-      sb.from('items').select('*').limit(10000),
-      sb.from('links').select('*').limit(10000),
+      sb.from('father_assets').select('*').range(0, 10000),
+      sb.from('child_assets').select('*').range(0, 10000),
+      sb.from('items').select('*').range(0, 10000),
+      sb.from('links').select('*').range(0, 10000),
     ]);
-    for(const r of [d,f,c,i,l]){ if(r.error) throw r.error; }
+    for(const r of [d,f,c,i,l]){ 
+      if(r.error){ 
+        console.error('Supabase error:', r.error);
+        throw r.error; 
+      } 
+    }
+    console.log('Loaded:', f.data?.length, 'father assets,', i.data?.length, 'items');
     state.departments = (d.data || []).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
     state.fatherAssets = f.data || [];
     state.childAssets = c.data || [];
