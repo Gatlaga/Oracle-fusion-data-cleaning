@@ -477,7 +477,22 @@ function renderAdmin(app){
     const barColor = donePct===100?'var(--accent2)':donePct>=60?'#f0a500':'var(--accent)';
 
     const dc = document.createElement('div');
-    dc.style.cssText='background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;';
+    dc.style.cssText='background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;cursor:pointer;transition:border-color .2s,background .2s;';
+    dc.onmouseenter=()=>{ dc.style.borderColor='var(--accent2)'; dc.style.background='var(--panel2)'; };
+    dc.onmouseleave=()=>{ dc.style.borderColor='var(--line)'; dc.style.background='var(--panel)'; };
+    
+    // Click handler — redirect to relevant tab
+    dc.onclick = (e)=>{
+      if(e.target.closest('button')) return; // dont redirect if button clicked
+      const typeEl = e.target.closest('.stat-card');
+      if(typeEl){
+        const type = typeEl.dataset.type;
+        state.currentDept = d.name;
+        if(type === 'father' || type === 'child') state.currentTab = 'asset';
+        else if(type === 'item') state.currentTab = 'item';
+        render();
+      }
+    };
     dc.innerHTML=`
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
         <strong style="font-size:15px">${escapeHtml(d.name)}</strong>
@@ -487,15 +502,15 @@ function renderAdmin(app){
         <div style="background:${barColor};width:${donePct}%;height:6px;border-radius:4px;transition:width .3s"></div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:10px">
-        <div style="text-align:center;background:var(--panel2);padding:8px;border-radius:6px">
+        <div style="text-align:center;background:var(--panel2);padding:8px;border-radius:6px;cursor:pointer;transition:background .2s" class="stat-card" data-type="father">
           <div style="font-size:20px;font-weight:700;color:var(--accent)">${s.assetClaimed}</div>
           <div style="font-size:10px;color:var(--sub)">Father Asset</div>
         </div>
-        <div style="text-align:center;background:var(--panel2);padding:8px;border-radius:6px">
+        <div style="text-align:center;background:var(--panel2);padding:8px;border-radius:6px;cursor:pointer;transition:background .2s" class="stat-card" data-type="child">
           <div style="font-size:20px;font-weight:700;color:var(--accent2)">${s.childDone}</div>
           <div style="font-size:10px;color:var(--sub)">Child Asset</div>
         </div>
-        <div style="text-align:center;background:var(--panel2);padding:8px;border-radius:6px">
+        <div style="text-align:center;background:var(--panel2);padding:8px;border-radius:6px;cursor:pointer;transition:background .2s" class="stat-card" data-type="item">
           <div style="font-size:20px;font-weight:700;color:#f0a500">${s.itemClaimed}</div>
           <div style="font-size:10px;color:var(--sub)">Item</div>
         </div>
@@ -511,9 +526,16 @@ function renderAdmin(app){
         <span style="color:var(--accent2)">✓ ${activeI} идэвхтэй</span>
         ${removeI>0?`<span style="color:var(--danger);margin-left:8px">✕ ${removeI} хасах</span>`:''}
       </div>`:''}`;
-    dGrid.appendChild(dc);
+    dc.appendChild(dGrid);
   });
   dash.appendChild(dGrid);
+  
+  // Add click handlers to stat cards
+  dash.querySelectorAll('.stat-card').forEach(sc=>{
+    sc.onmouseenter=()=>sc.style.background='var(--line)';
+    sc.onmouseleave=()=>sc.style.background='var(--panel2)';
+  });
+  
   app.appendChild(dash);
 
   // Item status overview
