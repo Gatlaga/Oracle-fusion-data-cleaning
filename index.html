@@ -209,33 +209,20 @@ function toast(msg){
 async function loadAll(){
   if(!sb){ renderSetupScreen(); return; }
   try{
-    // Helper: fetch all rows with pagination
+    // Helper: fetch all rows with pagination (Supabase caps at 1000/request)
     async function fetchAll(table, pageSize=1000){
       let allData = [];
       let page = 0;
       while(true){
         const start = page * pageSize;
         const end = start + pageSize - 1;
-        console.log(`Fetching ${table}: range ${start}-${end}`);
-        const {data, error, status} = await sb.from(table).select('*')
-          .range(start, end);
-        if(error){ 
-          console.error(`Error fetching ${table}:`, error);
-          throw error; 
-        }
-        if(!data){ 
-          console.warn(`No data returned for ${table} page ${page}`);
-          break; 
-        }
-        console.log(`  Got ${data.length} rows`);
+        const {data, error} = await sb.from(table).select('*').range(start, end);
+        if(error) throw error;
+        if(!data || data.length === 0) break;
         allData.push(...data);
-        if(data.length < pageSize) {
-          console.log(`  Less than pageSize, stopping`);
-          break;
-        }
+        if(data.length < pageSize) break;
         page++;
       }
-      console.log(`Total ${table}: ${allData.length}`);
       return allData;
     }
     
@@ -247,11 +234,7 @@ async function loadAll(){
       fetchAll('links'),
     ]);
     if(d.error) throw d.error;
-    console.log('Loaded:', f?.length, 'father assets,', i?.length, 'items');
-    // Show alert if counts are wrong
-    if(!f || f.length < 100 || !i || i.length < 100){
-      alert('❌ DATA LOAD FAILED:\nFather: ' + (f?.length||0) + '\nItems: ' + (i?.length||0) + '\nChild: ' + (c?.length||0) + '\nLinks: ' + (l?.length||0));
-    }
+    console.log('Loaded:', f?.length, 'father assets,', i?.length, 'items,', c?.length, 'child,', l?.length, 'links');
     state.departments = (d.data || []).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
     state.fatherAssets = f || [];
     state.childAssets = c || [];
@@ -1307,9 +1290,17 @@ function renderAssetTab(app){
 
   // Search filter (if many)
   if(mine.length>5){
+    const filterRow = document.createElement('div');
+    filterRow.style.cssText='display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap;';
     const mf = document.createElement('input'); mf.type='text'; mf.placeholder='Хайх (код/нэр)...'; 
-    mf.style.cssText='width:100%;margin-bottom:10px;padding:8px 10px;font-size:13px;';
-    mineTableOuter.appendChild(mf);
+    mf.style.cssText='flex:1;min-width:200px;padding:8px 10px;font-size:13px;';
+    const mineAreas=['-- Бүх Process Area --',...new Set(mine.map(a=>a.process_area||'').filter(Boolean))].sort((a,b)=>a.startsWith('--')?-1:a.localeCompare(b));
+    const areaFilter=document.createElement('select');
+    areaFilter.style.cssText='padding:8px 10px;font-size:13px;min-width:200px;';
+    areaFilter.innerHTML=mineAreas.map(a=>`<option value="${escapeHtml(a)}">${escapeHtml(a)}</option>`).join('');
+    filterRow.appendChild(mf);
+    filterRow.appendChild(areaFilter);
+    mineTableOuter.appendChild(filterRow);
     
     const mineListWrap = document.createElement('div');
     mineTableOuter.appendChild(mineListWrap);
@@ -1379,11 +1370,17 @@ function renderAssetTab(app){
     
     function drawMine(){
       const f=norm(mf.value);
-      const filtered=mine.filter(a=>!f||norm(a.code||'').includes(f)||norm(a.name).includes(f)||norm(a.asset_group_desc||'').includes(f));
+      const area=areaFilter.value;
+      const filtered=mine.filter(a=>{
+        if(f && !(norm(a.code||'').includes(f)||norm(a.name).includes(f)||norm(a.asset_group_desc||'').includes(f))) return false;
+        if(area && !area.includes('Бүх') && (a.process_area||'')!==area) return false;
+        return true;
+      });
       mineListWrap.innerHTML='';
       mineListWrap.appendChild(buildMineTable(filtered));
     }
     mf.oninput=drawMine;
+    areaFilter.onchange=drawMine;
     drawMine();
   } else {
     // No search needed
@@ -1521,7 +1518,7 @@ function renderItemTab(app){
         <th>#</th><th>Код</th><th>Нэр</th><th>Үзүүлэлт</th><th>Тоноглол</th>
         <th>UOM</th><th>Min</th><th>Max</th><th>Чухал</th>
         <th>Segment</th><th>Family</th><th>Class</th><th>Commodity (UNSPSC)</th>
-        <th>Төлөв</th><th></th>
+        <th>Төлөв</th><th>Тайлбар</th>
       </tr>`;
       pageItems.forEach((it,idx)=>{
         const u = getUnspsc(it.code) || {};
@@ -1550,11 +1547,10 @@ function renderItemTab(app){
             <option value="remove_pending" ${it.status==='remove_pending'?'selected':''}>! Хасах санал</option>
             <option value="removed" ${it.status==='removed'?'selected':''}>✕ Устгасан</option>
           </select></td>
-          <td style="color:var(--sub);font-size:10px">${it.note?'📝':''}</td>`;
+          <td><input type="text" value="${escapeHtml(it.note||'')}" style="width:130px;font-size:11px" data-id="${it.id}" data-field="note" placeholder="Тайлбар..."></td>`;
         t.appendChild(tr);
       });
       tableWrap.appendChild(t);
-      if(filtered.length>200) tableWrap.appendChild(el('div','link-note',`+ дахин ${filtered.length-200} мөр, хайлтаа нарийсга`));
 
       // Inline edit handlers
       t.querySelectorAll('input[data-id],select[data-id]').forEach(inp=>{
@@ -2080,11 +2076,34 @@ function renderMatrix(app){
     const f=norm(searchInp.value);
     const filtered = myItems.filter(it=>!f||norm(it.code||'').includes(f)||norm(it.name).includes(f)||norm(it.equipment||'').includes(f));
     listWrap.innerHTML='';
+
+    // Pagination
+    if(typeof state.linkPage !== 'number') state.linkPage = 0;
+    const PAGE_SIZE = 200;
+    const totalPages = Math.ceil(filtered.length / PAGE_SIZE) || 1;
+    const page = Math.min(state.linkPage, totalPages - 1);
+    const pageItems = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+
+    if(totalPages > 1){
+      const pgWrap = document.createElement('div');
+      pgWrap.style.cssText='display:flex;gap:10px;align-items:center;margin-bottom:10px;';
+      const prevBtn = document.createElement('button'); prevBtn.className='btn ghost small';
+      prevBtn.textContent='◀ Өмнөх'; prevBtn.disabled = page===0;
+      prevBtn.onclick=()=>{ state.linkPage=Math.max(0,state.linkPage-1); drawBomList(); listCard.scrollIntoView({behavior:'smooth',block:'start'}); };
+      const info = document.createElement('span'); info.style.color='var(--sub)';
+      info.textContent=`${page*PAGE_SIZE+1}–${Math.min((page+1)*PAGE_SIZE, filtered.length)} / ${filtered.length}`;
+      const nextBtn = document.createElement('button'); nextBtn.className='btn ghost small';
+      nextBtn.textContent='Дараах ▶'; nextBtn.disabled = page>=totalPages-1;
+      nextBtn.onclick=()=>{ state.linkPage=Math.min(totalPages-1,state.linkPage+1); drawBomList(); listCard.scrollIntoView({behavior:'smooth',block:'start'}); };
+      pgWrap.append(prevBtn, info, nextBtn);
+      listWrap.appendChild(pgWrap);
+    }
+
     const tbl = document.createElement('table');
     tbl.style.fontSize='12px';
     tbl.innerHTML='<tr><th style="width:30px">#</th><th>Код</th><th>Нэр</th><th>Тоноглол</th><th>Холбогдсон Asset</th><th style="width:80px"></th></tr>';
 
-    filtered.slice(0,200).forEach((it,idx)=>{
+    pageItems.forEach((it,idx)=>{
       const tr = document.createElement('tr');
       tr.innerHTML='<td style="color:var(--sub)">'+(idx+1)+'</td>'+
         '<td style="font-family:var(--mono);font-size:10px;white-space:nowrap">'+escapeHtml(it.code||'')+'</td>'+
@@ -2225,10 +2244,9 @@ function renderMatrix(app){
       };
       tbl.appendChild(tr);
     });
-    if(filtered.length>200) listWrap.appendChild(el('div','link-note','+ '+(filtered.length-200)+' бусад...'));
     listWrap.appendChild(tbl);
   }
-  searchInp.oninput = drawBomList;
+  searchInp.oninput = ()=>{ state.linkPage=0; drawBomList(); };
   drawBomList();
   app.appendChild(listCard);
 }
