@@ -1778,8 +1778,6 @@ let matrixSelectedItemIds = [];
 
 function renderMatrix(app){
   if(session.role==='manager') state.currentDept = session.deptName;
-
-  // Dept picker (admin only)
   if(session.role==='admin'){
     const sel = card('Алба нэгж сонго', '');
     const row = document.createElement('div'); row.className='row';
@@ -1792,22 +1790,20 @@ function renderMatrix(app){
 
   const dept = state.currentDept;
   const myItems = state.items.filter(it=>it.department===dept && it.status!=='removed');
+  const myFathers = state.fatherAssets.filter(a=>a.department===dept);
   const myChildren = state.childAssets.filter(c=>c.department===dept);
 
-  if(myChildren.length===0){
-    app.appendChild(card('Child Asset байхгүй', '"Asset шалгах" табд asset нээж child asset нэмсний дараа энд ажиллана.'));
-  }
-
-  // ---- ITEM LIST + INLINE BOM ----
-  const listCard = card(`📋 Item → Asset холбох (${dept})`, `Item бүрийн ард "🔗 Холбох" дарж, тухайн item ямар child asset-д хэдэн ш ордогыг бичнэ. Нийт ${myItems.length} item, ${myChildren.length} child asset.`);
+  const listCard = card(`📋 Item → Asset холбох (${dept})`, `Item бүрийн "🔗 Холбох" дарж Father/Child asset-д хэдэн ш ордгийг бичнэ. ${myItems.length} item, ${myFathers.length} father, ${myChildren.length} child asset.`);
 
   if(myItems.length===0){
     listCard.appendChild(el('div','empty','"Item шалгах" табд item claim хийсний дараа энд харагдана.'));
-    app.appendChild(listCard);
-    return;
+    app.appendChild(listCard); return;
+  }
+  if(myFathers.length===0){
+    listCard.appendChild(el('div','empty','"Asset шалгах" табд asset claim хийсний дараа энд ажиллана.'));
+    app.appendChild(listCard); return;
   }
 
-  // Search
   const searchInp = document.createElement('input'); searchInp.type='text';
   searchInp.placeholder='Item хайх (код/нэр/тоноглол)...';
   searchInp.style.cssText='width:100%;margin-bottom:10px;font-size:13px;';
@@ -1816,143 +1812,163 @@ function renderMatrix(app){
   const listWrap = document.createElement('div');
   listCard.appendChild(listWrap);
 
+  function linkSummaryHtml(itemId){
+    const links = state.links.filter(l=>l.item_id===itemId);
+    if(!links.length) return '<span style="color:var(--sub)">—</span>';
+    return links.map(l=>{
+      if(l.father_asset_id){
+        const fa = state.fatherAssets.find(a=>a.id===l.father_asset_id);
+        return fa ? '<span style="color:var(--accent)">'+escapeHtml(fa.name)+' ('+l.qty+'ш)</span>' : '';
+      }
+      if(l.child_asset_id){
+        const ca = state.childAssets.find(c=>c.id===l.child_asset_id);
+        return ca ? '<span style="color:var(--accent2)">'+escapeHtml(ca.name)+' ('+l.qty+'ш)</span>' : '';
+      }
+      return '';
+    }).filter(Boolean).join(', ');
+  }
+
   function drawBomList(){
     const f=norm(searchInp.value);
     const filtered = myItems.filter(it=>!f||norm(it.code||'').includes(f)||norm(it.name).includes(f)||norm(it.equipment||'').includes(f));
     listWrap.innerHTML='';
-
     const tbl = document.createElement('table');
     tbl.style.fontSize='12px';
-    tbl.innerHTML=`<tr>
-      <th style="width:30px">#</th>
-      <th>Код</th>
-      <th>Нэр</th>
-      <th>Тоноглол</th>
-      <th>Холбосон Asset</th>
-      <th style="width:80px"></th>
-    </tr>`;
+    tbl.innerHTML='<tr><th style="width:30px">#</th><th>Код</th><th>Нэр</th><th>Тоноглол</th><th>Холбогдсон Asset</th><th style="width:80px"></th></tr>';
 
     filtered.slice(0,200).forEach((it,idx)=>{
-      const myLinks = state.links.filter(l=>l.item_id===it.id);
-      const linkSummary = myLinks.map(l=>{
-        const ca = state.childAssets.find(c=>c.id===l.child_asset_id);
-        return ca ? `${ca.name} (${l.qty}ш)` : '';
-      }).filter(Boolean).join(', ');
-
       const tr = document.createElement('tr');
-      tr.innerHTML=`
-        <td style="color:var(--sub)">${idx+1}</td>
-        <td style="font-family:var(--mono);font-size:10px;white-space:nowrap">${escapeHtml(it.code||'')}</td>
-        <td style="font-weight:500;max-width:200px">${escapeHtml(it.name)}</td>
-        <td class="link-note" style="max-width:120px">${escapeHtml(it.equipment||'')}</td>
-        <td style="font-size:11px;color:var(--accent2)">${linkSummary||'<span style="color:var(--sub)">—</span>'}</td>
-        <td><button class="btn ghost small" style="font-size:11px">🔗 Холбох</button></td>
-      `;
+      tr.innerHTML='<td style="color:var(--sub)">'+(idx+1)+'</td>'+
+        '<td style="font-family:var(--mono);font-size:10px;white-space:nowrap">'+escapeHtml(it.code||'')+'</td>'+
+        '<td style="font-weight:500;max-width:220px">'+escapeHtml(it.name)+'</td>'+
+        '<td class="link-note" style="max-width:120px">'+escapeHtml(it.equipment||'')+'</td>'+
+        '<td style="font-size:11px" class="link-summary">'+linkSummaryHtml(it.id)+'</td>'+
+        '<td><button class="btn ghost small" style="font-size:11px">\u{1F517} Холбох</button></td>';
 
-      const btn = tr.querySelector('button');
-      btn.onclick = ()=>{
-        // Toggle inline BOM editor
-        const existingRow = document.getElementById('bom-edit-'+it.id);
-        if(existingRow){ existingRow.remove(); return; }
-        // Remove other open editors
+      tr.querySelector('button').onclick = ()=>{
+        const ex = document.getElementById('bom-edit-'+it.id);
+        if(ex){ ex.remove(); return; }
         document.querySelectorAll('[id^="bom-edit-"]').forEach(el3=>el3.remove());
 
         const editRow = document.createElement('tr');
         editRow.id = 'bom-edit-'+it.id;
         const editTd = document.createElement('td');
         editTd.colSpan = 6;
-        editTd.style.cssText='background:var(--panel2);padding:12px;';
+        editTd.style.cssText='background:var(--panel2);padding:14px;border-radius:6px;';
+        editTd.innerHTML = '<div style="font-size:13px;font-weight:700;margin-bottom:10px">\u{1F4E6} '+escapeHtml(it.name)+'</div>'+
+          '<div style="font-size:11px;color:var(--sub);margin-bottom:8px">Father болон Child asset аль алинд холбож болно. Тоо бичээд \u{1F4BE} дарна.</div>';
 
-        // Build inline BOM editor
-        let editHtml = '<div style="font-size:12px;font-weight:600;margin-bottom:8px">📦 ' + escapeHtml(it.name) + ' — ямар child asset-д хэдэн ш?</div>';
-        editHtml += '<div style="display:grid;grid-template-columns:1fr 80px 60px;gap:6px;align-items:center;font-size:11px;color:var(--sub);margin-bottom:4px"><span>Child Asset</span><span>Тоо ш</span><span></span></div>';
+        // FATHER ASSETS
+        const faTitle = document.createElement('div');
+        faTitle.style.cssText='font-size:12px;font-weight:700;color:var(--accent);margin:6px 0 4px;';
+        faTitle.textContent='\u{1F3ED} Father Asset';
+        editTd.appendChild(faTitle);
 
-        editTd.innerHTML = editHtml;
-
-        // Group children by father asset
-        const fatherMap = {};
-        myChildren.forEach(c2=>{
-          const fa=state.fatherAssets.find(x=>x.id===c2.father_id);
-          const key = fa ? fa.id : 'unknown';
-          if(!fatherMap[key]) fatherMap[key]={fa, children:[]};
-          fatherMap[key].children.push(c2);
+        myFathers.forEach(fa=>{
+          const eLink = state.links.find(l=>l.father_asset_id===fa.id && l.item_id===it.id);
+          const r2 = document.createElement('div');
+          r2.style.cssText='display:grid;grid-template-columns:1fr 90px 70px 40px;gap:6px;align-items:center;margin-bottom:3px;';
+          const nm = document.createElement('div');
+          nm.innerHTML='<span style="font-size:12px;font-weight:500">'+escapeHtml(fa.name)+'</span> <span style="font-family:var(--mono);font-size:10px;color:var(--sub)">'+escapeHtml(fa.code||'')+'</span>';
+          const ar = document.createElement('span');
+          ar.style.cssText='font-size:10px;color:var(--sub)'; ar.textContent=fa.process_area||'';
+          const qi = document.createElement('input');
+          qi.type='number'; qi.min='0';
+          qi.style.cssText='width:60px;text-align:center;font-size:13px;font-weight:700;padding:4px;';
+          qi.value=eLink?(eLink.qty||''):''; qi.placeholder='0';
+          if(eLink&&eLink.qty) qi.style.background='#1a2e22';
+          const sb2 = document.createElement('button');
+          sb2.className='btn ghost small'; sb2.textContent='\u{1F4BE}';
+          async function saveFa(){
+            const val=qi.value.trim();
+            let lk=state.links.find(l=>l.father_asset_id===fa.id&&l.item_id===it.id);
+            if(!val||val==='0'){
+              if(lk){await dbDelete('links',lk.id);state.links=state.links.filter(x=>x.id!==lk.id);}
+              qi.style.background='';toast('\u2705 Хасагдлаа');
+            } else if(lk){
+              lk.qty=val;await dbUpdate('links',lk.id,{qty:val});
+              qi.style.background='#1a2e22';toast('\u2705 Шинэчлэгдлээ');
+            } else {
+              const nr={id:uid(),father_asset_id:fa.id,child_asset_id:null,item_id:it.id,qty:val,verified:false};
+              await dbInsert('links',nr);state.links.push(nr);
+              qi.style.background='#1a2e22';toast('\u2705 Холболт нэмэгдлээ');
+            }
+            const st=tr.querySelector('.link-summary');
+            if(st) st.innerHTML=linkSummaryHtml(it.id);
+          }
+          qi.onchange=saveFa; sb2.onclick=saveFa;
+          r2.append(nm,ar,qi,sb2); editTd.appendChild(r2);
         });
 
-        Object.values(fatherMap).forEach(({fa, children})=>{
-          if(!fa) return;
-          const grpLbl = document.createElement('div');
-          grpLbl.style.cssText='font-size:10px;color:var(--sub);font-weight:700;margin:6px 0 2px;padding-top:4px;border-top:1px solid var(--line);';
-          grpLbl.textContent = '▸ ' + fa.name;
-          editTd.appendChild(grpLbl);
+        // CHILD ASSETS
+        if(myChildren.length>0){
+          const caTitle = document.createElement('div');
+          caTitle.style.cssText='font-size:12px;font-weight:700;color:var(--accent2);margin:10px 0 4px;padding-top:6px;border-top:1px solid var(--line);';
+          caTitle.textContent='\u{1F527} Child Asset';
+          editTd.appendChild(caTitle);
 
-          children.forEach(c2=>{
-            const existingLink = state.links.find(l=>l.child_asset_id===c2.id && l.item_id===it.id);
-            const row2 = document.createElement('div');
-            row2.style.cssText='display:grid;grid-template-columns:1fr 80px 60px;gap:6px;align-items:center;margin-bottom:4px;';
-            
-            const nameSpan = document.createElement('span');
-            nameSpan.style.cssText='font-size:12px;';
-            nameSpan.textContent = c2.name;
-            
-            const qtyInp = document.createElement('input');
-            qtyInp.type='number'; qtyInp.min='0';
-            qtyInp.style.cssText='width:70px;text-align:center;font-size:13px;font-weight:700;padding:4px;';
-            qtyInp.value = existingLink ? (existingLink.qty||'') : '';
-            qtyInp.placeholder='0';
-            if(existingLink && existingLink.qty) qtyInp.style.background='#1a2e22';
-
-            const saveBtn = document.createElement('button');
-            saveBtn.className='btn ghost small';
-            saveBtn.textContent='💾';
-            saveBtn.style.fontSize='14px';
-
-            qtyInp.onchange = saveBtn.onclick = async ()=>{
-              const val = qtyInp.value.trim();
-              let link = state.links.find(l=>l.child_asset_id===c2.id && l.item_id===it.id);
-              if(!val || val==='0'){
-                if(link){ await dbDelete('links',link.id); state.links=state.links.filter(x=>x.id!==link.id); }
-                qtyInp.style.background='';
-                toast('✅ Холболт хасагдлаа');
-              } else if(link){
-                link.qty=val; await dbUpdate('links',link.id,{qty:val});
-                qtyInp.style.background='#1a2e22';
-                toast('✅ Тоо шинэчлэгдлээ');
-              } else {
-                const newRow={id:uid(),child_asset_id:c2.id,item_id:it.id,qty:val,verified:false,corr_category:'',corr_min:'',corr_max:'',corr_uom:''};
-                await dbInsert('links',newRow); state.links.push(newRow);
-                qtyInp.style.background='#1a2e22';
-                toast('✅ Холболт нэмэгдлээ');
-              }
-              // Update summary in main row
-              const newLinks = state.links.filter(l=>l.item_id===it.id);
-              const newSummary = newLinks.map(l=>{
-                const ca2=state.childAssets.find(c3=>c3.id===l.child_asset_id);
-                return ca2 ? `${ca2.name} (${l.qty}ш)` : '';
-              }).filter(Boolean).join(', ');
-              const summTd = tr.querySelector('td:nth-child(5)');
-              if(summTd) summTd.innerHTML = newSummary || '<span style="color:var(--sub)">—</span>';
-            };
-
-            row2.append(nameSpan, qtyInp, saveBtn);
-            editTd.appendChild(row2);
+          const fMap={};
+          myChildren.forEach(c2=>{
+            const fa2=state.fatherAssets.find(x=>x.id===c2.father_id);
+            const k=fa2?fa2.id:'_';
+            if(!fMap[k])fMap[k]={fa:fa2,children:[]};
+            fMap[k].children.push(c2);
           });
-        });
-
+          Object.values(fMap).forEach(({fa:fa2,children})=>{
+            if(fa2){
+              const gl=document.createElement('div');
+              gl.style.cssText='font-size:10px;color:var(--sub);margin:4px 0 2px;';
+              gl.textContent='  \u25B8 '+fa2.name;
+              editTd.appendChild(gl);
+            }
+            children.forEach(c2=>{
+              const eLink=state.links.find(l=>l.child_asset_id===c2.id&&l.item_id===it.id);
+              const r2=document.createElement('div');
+              r2.style.cssText='display:grid;grid-template-columns:1fr 90px 70px 40px;gap:6px;align-items:center;margin-bottom:3px;padding-left:16px;';
+              const nm=document.createElement('span');nm.style.fontSize='12px';nm.textContent=c2.name;
+              const ql=document.createElement('span');ql.style.cssText='font-size:10px;color:var(--sub)';ql.textContent='x'+(c2.qty||'1');
+              const qi=document.createElement('input');
+              qi.type='number';qi.min='0';
+              qi.style.cssText='width:60px;text-align:center;font-size:13px;font-weight:700;padding:4px;';
+              qi.value=eLink?(eLink.qty||''):'';qi.placeholder='0';
+              if(eLink&&eLink.qty) qi.style.background='#1a2e22';
+              const sb2=document.createElement('button');
+              sb2.className='btn ghost small';sb2.textContent='\u{1F4BE}';
+              async function saveCa(){
+                const val=qi.value.trim();
+                let lk=state.links.find(l=>l.child_asset_id===c2.id&&l.item_id===it.id);
+                if(!val||val==='0'){
+                  if(lk){await dbDelete('links',lk.id);state.links=state.links.filter(x=>x.id!==lk.id);}
+                  qi.style.background='';toast('\u2705 Хасагдлаа');
+                } else if(lk){
+                  lk.qty=val;await dbUpdate('links',lk.id,{qty:val});
+                  qi.style.background='#1a2e22';toast('\u2705 Шинэчлэгдлээ');
+                } else {
+                  const nr={id:uid(),child_asset_id:c2.id,father_asset_id:null,item_id:it.id,qty:val,verified:false};
+                  await dbInsert('links',nr);state.links.push(nr);
+                  qi.style.background='#1a2e22';toast('\u2705 Холболт нэмэгдлээ');
+                }
+                const st=tr.querySelector('.link-summary');
+                if(st) st.innerHTML=linkSummaryHtml(it.id);
+              }
+              qi.onchange=saveCa;sb2.onclick=saveCa;
+              r2.append(nm,ql,qi,sb2);editTd.appendChild(r2);
+            });
+          });
+        }
         editRow.appendChild(editTd);
         tr.parentNode.insertBefore(editRow, tr.nextSibling);
       };
-
       tbl.appendChild(tr);
     });
-
-    if(filtered.length>200) listWrap.appendChild(el('div','link-note',`+ ${filtered.length-200} бусад...`));
+    if(filtered.length>200) listWrap.appendChild(el('div','link-note','+ '+(filtered.length-200)+' бусад...'));
     listWrap.appendChild(tbl);
   }
-
   searchInp.oninput = drawBomList;
   drawBomList();
   app.appendChild(listCard);
 }
+
 
 // ================= GUIDE TAB =================
 function renderGuide(app){
@@ -2048,13 +2064,18 @@ function renderExport(app){
     const b4 = document.createElement('button'); b4.className='btn secondary';
     b4.textContent=`Item↔Asset холболт (${myLinks.length}) татах`;
     b4.onclick=()=>{
-      const rows=[['Child Asset','Father Asset','Item Code','Item Name','Category','Min','Max','UOM','Тоо ш','Баталгаажсан']];
+      const rows=[['Asset Type','Asset Name','Asset Code','Father Asset','Item Code','Item Name','UOM','Тоо ш']];
       myLinks.forEach(l=>{
-        const c=state.childAssets.find(x=>x.id===l.child_asset_id);
-        const fa=c?state.fatherAssets.find(x=>x.id===c.father_id):null;
         const it=state.items.find(x=>x.id===l.item_id);
-        if(!c||!it) return;
-        rows.push([c.name,fa?fa.name:'',it.code,it.name,l.corr_category||it.category||'',l.corr_min||it.min||'',l.corr_max||it.max||'',l.corr_uom||it.uom||'',l.qty||'',l.verified?'Тийм':'Үгүй']);
+        if(!it) return;
+        if(l.father_asset_id){
+          const fa=state.fatherAssets.find(x=>x.id===l.father_asset_id);
+          rows.push(['Father',fa?fa.name:'',fa?fa.code:'','',it.code,it.name,it.uom||'',l.qty||'']);
+        } else if(l.child_asset_id){
+          const c=state.childAssets.find(x=>x.id===l.child_asset_id);
+          const fa=c?state.fatherAssets.find(x=>x.id===c.father_id):null;
+          rows.push(['Child',c?c.name:'','',fa?fa.name:'',it.code,it.name,it.uom||'',l.qty||'']);
+        }
       });
       downloadCsv(rows,`${targetDept||'my'}-item-links.csv`);
     };
