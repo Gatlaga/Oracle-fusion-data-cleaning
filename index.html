@@ -209,26 +209,36 @@ function toast(msg){
 async function loadAll(){
   if(!sb){ renderSetupScreen(); return; }
   try{
-    // Supabase default limit is 1000; use range to get more
-    const [d,f,c,i,l] = await Promise.all([
-      sb.from('departments').select('*'),
-      sb.from('father_assets').select('*').range(0, 10000),
-      sb.from('child_assets').select('*').range(0, 10000),
-      sb.from('items').select('*').range(0, 10000),
-      sb.from('links').select('*').range(0, 10000),
-    ]);
-    for(const r of [d,f,c,i,l]){ 
-      if(r.error){ 
-        console.error('Supabase error:', r.error);
-        throw r.error; 
-      } 
+    // Helper: fetch all rows with pagination
+    async function fetchAll(table, pageSize=1000){
+      let allData = [];
+      let page = 0;
+      while(true){
+        const {data, error} = await sb.from(table).select('*')
+          .range(page * pageSize, (page + 1) * pageSize - 1);
+        if(error) throw error;
+        if(!data || data.length === 0) break;
+        allData.push(...data);
+        if(data.length < pageSize) break;
+        page++;
+      }
+      return allData;
     }
-    console.log('Loaded:', f.data?.length, 'father assets,', i.data?.length, 'items');
+    
+    const [d, f, c, i, l] = await Promise.all([
+      sb.from('departments').select('*'),
+      fetchAll('father_assets'),
+      fetchAll('child_assets'),
+      fetchAll('items'),
+      fetchAll('links'),
+    ]);
+    if(d.error) throw d.error;
+    console.log('Loaded:', f?.length, 'father assets,', i?.length, 'items');
     state.departments = (d.data || []).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
-    state.fatherAssets = f.data || [];
-    state.childAssets = c.data || [];
-    state.items = i.data || [];
-    state.links = l.data || [];
+    state.fatherAssets = f || [];
+    state.childAssets = c || [];
+    state.items = i || [];
+    state.links = l || [];
     connOk = true;
   }catch(e){
     console.error(e);
