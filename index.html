@@ -889,54 +889,142 @@ function renderAssetTab(app){
   }
 
   // ---- Дутуу нэмэх ----
-  const addCard = card('2. Дутуу Asset нэмэх', 'Жагсаалтад алга байгаа asset-ыг өөрөө нэмнэ. Боломжтой газарт байгаа сонголтуудаас сонгоно, эсвэл шинээр бичнэ.');
+  const addCard = card('2. Дутуу Asset нэмэх', 'Жагсаалтад алга байгаа asset-ыг өөрөө нэмнэ. Asset Description-г сонгоход Asset Group нь автоматаар орно.');
 
-  // Existing unique values for dropdowns (from all imported assets)
-  const allGroups = [...new Set(state.fatherAssets.map(a=>a.asset_group).filter(Boolean))].sort();
-  const allGroupDescs = [...new Set(state.fatherAssets.map(a=>a.asset_group_desc).filter(Boolean))].sort();
+  // Build lookup: group_desc -> {code, group, cat, area}
+  const descLookup = {};
+  state.fatherAssets.forEach(a=>{
+    if(a.asset_group_desc){
+      descLookup[a.asset_group_desc] = {
+        code: a.asset_group,
+        group: a.asset_group,
+        groupDesc: a.asset_group_desc,
+        cat: a.asset_category,
+        area: a.process_area
+      };
+    }
+  });
+
+  // All unique descriptions for dropdown
+  const allDescs = [...new Set(state.fatherAssets.map(a=>a.asset_group_desc).filter(Boolean))].sort();
   const allCats = [...new Set(state.fatherAssets.map(a=>a.asset_category).filter(Boolean))].sort();
   const allAreas = [...new Set(state.fatherAssets.map(a=>a.process_area).filter(Boolean))].sort();
-
-  function fieldWithDatalist(labelText, listId, options, placeholder){
-    const wrap = document.createElement('div');
-    const lbl = document.createElement('label'); lbl.textContent=labelText;
-    lbl.style.cssText='font-size:11px;color:var(--sub);display:block;margin-bottom:3px;';
-    const inp = document.createElement('input'); inp.type='text'; inp.placeholder=placeholder||''; inp.style.width='100%';
-    inp.setAttribute('list', listId);
-    const dl = document.createElement('datalist'); dl.id=listId;
-    dl.innerHTML = options.map(o=>`<option value="${escapeHtml(o)}">`).join('');
-    wrap.append(lbl, inp, dl);
-    return {wrap, inp};
-  }
 
   const grid = document.createElement('div');
   grid.style.cssText='display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;';
 
-  const codeF = fieldWithDatalist('Asset Number (заавал биш)', 'dl-code', [], 'жишээ: FP-13-999');
-  const nameF = fieldWithDatalist('Asset Description *', 'dl-name', [], 'Asset-ийн нэр (заавал)');
-  const groupF = fieldWithDatalist('Asset Group', 'dl-group', allGroups, 'жишээ: FP101');
-  const groupDescF = fieldWithDatalist('Asset Group Description', 'dl-groupdesc', allGroupDescs, 'жишээ: Centrifugal fan');
-  const catF = fieldWithDatalist('Asset Category', 'dl-cat', allCats, 'жишээ: 80.11.01');
-  const areaF = fieldWithDatalist('Process Area', 'dl-area', allAreas, 'жишээ: Boiler#1|SA fan');
+  // Asset Description (FIRST & PRIMARY) - dropdown, not autocomplete
+  const descDiv = document.createElement('div');
+  const descLbl = document.createElement('label');
+  descLbl.textContent = 'Asset Group Description *';
+  descLbl.style.cssText='font-size:11px;color:var(--sub);display:block;margin-bottom:3px;';
+  const descSel = document.createElement('select');
+  descSel.style.width='100%';
+  descSel.innerHTML = '<option value="">-- Asset Group Description сонго --</option>' +
+    allDescs.map(d=>`<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
+  descDiv.append(descLbl, descSel);
+  grid.appendChild(descDiv);
 
-  grid.append(codeF.wrap, nameF.wrap, groupF.wrap, groupDescF.wrap, catF.wrap, areaF.wrap);
+  // Asset Group (автоматаар бөглөгдөнө)
+  const groupDiv = document.createElement('div');
+  const groupLbl = document.createElement('label');
+  groupLbl.textContent = 'Asset Group (автоматаар)';
+  groupLbl.style.cssText='font-size:11px;color:var(--sub);display:block;margin-bottom:3px;';
+  const groupInp = document.createElement('input');
+  groupInp.type='text';
+  groupInp.placeholder='автоматаар сөлөрнө';
+  groupInp.readOnly=true;
+  groupInp.style.cssText='background:var(--panel2);opacity:.7;';
+  groupDiv.append(groupLbl, groupInp);
+  grid.appendChild(groupDiv);
+
+  // Asset Number (заавал биш)
+  const codeDiv = document.createElement('div');
+  const codeLbl = document.createElement('label');
+  codeLbl.textContent = 'Asset Number (заавал биш)';
+  codeLbl.style.cssText='font-size:11px;color:var(--sub);display:block;margin-bottom:3px;';
+  const codeInp = document.createElement('input');
+  codeInp.type='text';
+  codeInp.placeholder='жишээ: FP-13-999';
+  codeDiv.append(codeLbl, codeInp);
+  grid.appendChild(codeDiv);
+
+  // Asset Description нэр (заавал)
+  const nameDiv = document.createElement('div');
+  const nameLbl = document.createElement('label');
+  nameLbl.textContent = 'Asset Description Нэр *';
+  nameLbl.style.cssText='font-size:11px;color:var(--sub);display:block;margin-bottom:3px;';
+  const nameInp = document.createElement('input');
+  nameInp.type='text';
+  nameInp.placeholder='Asset-ийн нэр (заавал)';
+  nameDiv.append(nameLbl, nameInp);
+  grid.appendChild(nameDiv);
+
+  // Asset Category (dropdown)
+  const catDiv = document.createElement('div');
+  const catLbl = document.createElement('label');
+  catLbl.textContent = 'Asset Category';
+  catLbl.style.cssText='font-size:11px;color:var(--sub);display:block;margin-bottom:3px;';
+  const catSel = document.createElement('select');
+  catSel.style.width='100%';
+  catSel.innerHTML = '<option value="">-- сонго --</option>' +
+    allCats.map(c=>`<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+  catDiv.append(catLbl, catSel);
+  grid.appendChild(catDiv);
+
+  // Process Area (dropdown)
+  const areaDiv = document.createElement('div');
+  const areaLbl = document.createElement('label');
+  areaLbl.textContent = 'Process Area';
+  areaLbl.style.cssText='font-size:11px;color:var(--sub);display:block;margin-bottom:3px;';
+  const areaSel = document.createElement('select');
+  areaSel.style.width='100%';
+  areaSel.innerHTML = '<option value="">-- сонго --</option>' +
+    allAreas.map(a=>`<option value="${escapeHtml(a)}">${escapeHtml(a)}</option>`).join('');
+  areaDiv.append(areaLbl, areaSel);
+  grid.appendChild(areaDiv);
+
+  // Auto-fill logic
+  descSel.onchange = ()=>{
+    const desc = descSel.value;
+    const lookup = descLookup[desc];
+    if(lookup){
+      groupInp.value = lookup.group;
+      catSel.value = lookup.cat || '';
+      areaSel.value = lookup.area || '';
+    } else {
+      groupInp.value = '';
+      catSel.value = '';
+      areaSel.value = '';
+    }
+  };
+
   addCard.appendChild(grid);
 
-  const addBtn = document.createElement('button'); addBtn.className='btn'; addBtn.textContent='+ Asset нэмэх';
+  // Add button
+  const addBtn = document.createElement('button');
+  addBtn.className='btn';
+  addBtn.textContent='+ Asset нэмэх';
   addBtn.onclick = async ()=>{
-    const v = nameF.inp.value.trim();
-    if(!v){ toast('Asset Description заавал бичнэ үү'); nameF.inp.focus(); return; }
+    const name = nameInp.value.trim();
+    if(!name){ toast('Asset Description Нэр заавал бичнэ үү'); nameInp.focus(); return; }
     const row = {
-      id: uid(), code: codeF.inp.value.trim(), name: v,
-      asset_group: groupF.inp.value.trim(),
-      asset_group_desc: groupDescF.inp.value.trim(),
-      asset_category: catF.inp.value.trim(),
-      process_area: areaF.inp.value.trim(),
-      department: dept, source: 'manual'
+      id: uid(),
+      code: codeInp.value.trim(),
+      name: name,
+      asset_group: groupInp.value.trim(),
+      asset_group_desc: descSel.value.trim(),
+      asset_category: catSel.value.trim(),
+      process_area: areaSel.value.trim(),
+      department: dept,
+      source: 'manual'
     };
     await dbInsert('father_assets', row);
     state.fatherAssets.push(row);
-    [codeF.inp,nameF.inp,groupF.inp,groupDescF.inp,catF.inp,areaF.inp].forEach(i=>i.value='');
+    [codeInp, nameInp, descSel, groupInp, catSel, areaSel].forEach(f=>{
+      if(f.type==='select-one') f.value='';
+      else f.value='';
+    });
     render();
   };
   addCard.appendChild(addBtn);
