@@ -890,7 +890,7 @@ function renderAssetTab(app){
   }
 
   // ---- Дутуу нэмэх ----
-  const addCard = card('2. Дутуу Asset нэмэх', 'Excel-ийн мэдээлэл дээрээ үндэслэн Asset Group Description сонгоход, Asset Group код болон Asset Category автоматаар орно.');
+  const addCard = card('2. Дутуу Asset нэмэх', 'Excel-ийн мэдээлэл дээрээ үндэслэн Asset Group Description сонгоход, Asset Group, Asset Category, Process Area автоматаар орно.');
 
   // Build the form
   const grid = document.createElement('div');
@@ -936,32 +936,21 @@ function renderAssetTab(app){
   catDiv.append(catLbl, catInp);
   grid.appendChild(catDiv);
 
-  // 4. Asset Description (REQUIRED - from lookup)
+  // 4. Asset Description (MANUAL INPUT - REQUIRED)
   const assetDescDiv = document.createElement('div');
   const assetDescLbl = document.createElement('label');
-  assetDescLbl.textContent = 'Asset Description *';
+  assetDescLbl.textContent = 'Asset Description (гараар) *';
   assetDescLbl.style.cssText='font-size:11px;color:var(--sub);display:block;margin-bottom:3px;font-weight:700;';
-  const assetDescSel = document.createElement('select');
-  assetDescSel.style.width='100%';
-  assetDescSel.innerHTML = '<option value="">-- сонго --</option>';
-  assetDescDiv.append(assetDescLbl, assetDescSel);
+  const assetDescInp = document.createElement('input');
+  assetDescInp.type='text';
+  assetDescInp.placeholder='Нэр бич (жишээ: Crane/Hoist|Power Plant|ACC 3)';
+  assetDescDiv.append(assetDescLbl, assetDescInp);
   grid.appendChild(assetDescDiv);
 
-  // 5. Asset Name (REQUIRED - manual input)
-  const nameDiv = document.createElement('div');
-  const nameLbl = document.createElement('label');
-  nameLbl.textContent = 'Asset Name (гараар) *';
-  nameLbl.style.cssText='font-size:11px;color:var(--sub);display:block;margin-bottom:3px;font-weight:700;';
-  const nameInp = document.createElement('input');
-  nameInp.type='text';
-  nameInp.placeholder='Бодит нэр бич (жишээ: SA Fan #1)';
-  nameDiv.append(nameLbl, nameInp);
-  grid.appendChild(nameDiv);
-
-  // 6. Process Area (FROM DROPDOWN)
+  // 5. Process Area (AUTO-FILL FROM LOOKUP)
   const areaDiv = document.createElement('div');
   const areaLbl = document.createElement('label');
-  areaLbl.textContent = 'Process Area *';
+  areaLbl.textContent = 'Process Area (автоматаар) *';
   areaLbl.style.cssText='font-size:11px;color:var(--sub);display:block;margin-bottom:3px;font-weight:700;';
   const areaSel = document.createElement('select');
   areaSel.style.width='100%';
@@ -975,7 +964,6 @@ function renderAssetTab(app){
     if(typeof ASSET_LOOKUP === 'undefined' || !desc){
       codeInp.value = '';
       catInp.value = '';
-      assetDescSel.innerHTML = '<option value="">-- сонго --</option>';
       areaSel.innerHTML = '<option value="">-- сонго --</option>';
       return;
     }
@@ -987,13 +975,14 @@ function renderAssetTab(app){
     codeInp.value = lookup.code || '';
     catInp.value = lookup.category || '';
 
-    // Set Asset Description dropdown
-    assetDescSel.innerHTML = '<option value="">-- сонго --</option>' +
-      (lookup.asset_descriptions || []).map(ad=>`<option value="${escapeHtml(ad)}">${escapeHtml(ad)}</option>`).join('');
-
     // Set Process Area dropdown
     areaSel.innerHTML = '<option value="">-- сонго --</option>' +
       (lookup.process_areas || []).map(pa=>`<option value="${escapeHtml(pa)}">${escapeHtml(pa)}</option>`).join('');
+    
+    // Auto-select first process area if only one
+    if(lookup.process_areas && lookup.process_areas.length === 1){
+      areaSel.value = lookup.process_areas[0];
+    }
   };
 
   addCard.appendChild(grid);
@@ -1011,16 +1000,15 @@ function renderAssetTab(app){
     if(!validateEmpty(descSel.value, 'Asset Group Description')) { descSel.focus(); return; }
     if(!validateEmpty(codeInp.value, 'Asset Group Code')) return;
     if(!validateEmpty(catInp.value, 'Asset Category')) return;
-    if(!validateEmpty(assetDescSel.value, 'Asset Description')) { assetDescSel.focus(); return; }
-    if(!validateEmpty(nameInp.value, 'Asset Name')) { nameInp.focus(); return; }
+    if(!validateEmpty(assetDescInp.value, 'Asset Description')) { assetDescInp.focus(); return; }
     if(!validateEmpty(areaSel.value, 'Process Area')) { areaSel.focus(); return; }
 
     addBtn.disabled=true; addBtn.textContent='Хадгалж байна...';
 
     const row = {
       id: uid(),
-      code: '', // не даём код при добавлении
-      name: nameInp.value.trim(),
+      code: '', // no code
+      name: assetDescInp.value.trim(),
       asset_group: codeInp.value.trim(),
       asset_group_desc: descSel.value.trim(),
       asset_category: catInp.value.trim(),
@@ -1034,8 +1022,7 @@ function renderAssetTab(app){
 
     state.fatherAssets.push(row);
     // Reset form
-    descSel.value=''; codeInp.value=''; catInp.value=''; assetDescSel.innerHTML='<option value="">-- сонго --</option>';
-    nameInp.value=''; areaSel.innerHTML='<option value="">-- сонго --</option>';
+    descSel.value=''; codeInp.value=''; catInp.value=''; assetDescInp.value=''; areaSel.innerHTML='<option value="">-- сонго --</option>';
     addBtn.disabled=false; addBtn.textContent='+ Asset нэмэх';
     render();
   };
