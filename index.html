@@ -2508,18 +2508,21 @@ function escapeHtml(s){ return (s||'').toString().replace(/[&<>"']/g, m=>({'&':'
 
 loadAll();
 
-// Auto-refresh: tab руу шилжихэд Supabase-аас дахин ачаалах
+// Auto-refresh DISABLED - was causing data reloads during user work
+// Users can manually refresh if needed (F5 or browser refresh)
+// Uncomment below if needed for specific use case
+/*
 document.addEventListener('visibilitychange', ()=>{
   if(document.visibilityState === 'visible' && sb && session.role){
     loadAll();
   }
 });
-// 2 минут тутам auto-refresh (бусад хүмүүсийн өөрчлөлтийг авах)
 setInterval(()=>{
   if(sb && session.role && document.visibilityState === 'visible'){
     loadAll();
   }
 }, 120000);
+*/
 </script>
 </body>
 </html>
