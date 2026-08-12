@@ -42,10 +42,24 @@
   button.btn.danger{background:var(--danger);color:#fff;}
   button.btn:disabled{opacity:.4;cursor:not-allowed;}
   button.btn.small{padding:4px 10px;font-size:12px;}
-  table{width:100%;border-collapse:collapse;font-size:12.5px;}
-  th{text-align:left;color:var(--sub);font-weight:600;padding:8px 8px;border-bottom:1px solid var(--line);white-space:nowrap;}
-  td{padding:7px 8px;border-bottom:1px solid #232b35;vertical-align:middle;}
+  table{width:100%;border-collapse:collapse;font-size:12.5px;table-layout:auto;}
+  th{text-align:left;color:var(--sub);font-weight:600;padding:8px 6px;border-bottom:1px solid var(--line);white-space:nowrap;font-size:11px;}
+  td{padding:7px 6px;border-bottom:1px solid #232b35;vertical-align:middle;}
+  td input[type="text"],td select{max-width:100%;box-sizing:border-box;}
   tr:hover td{background:#1d2530;}
+  .card{overflow-x:auto;}
+  @media(max-width:1200px){
+    table{font-size:11px;}
+    th,td{padding:5px 4px;}
+    td input[type="text"]{width:100px !important;font-size:11px;}
+    td select{font-size:11px;}
+  }
+  @media(max-width:768px){
+    table{font-size:10px;}
+    th,td{padding:4px 3px;}
+    td input[type="text"]{width:80px !important;font-size:10px;}
+    .card{padding:10px;}
+  }
   .tag{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600;}
   .tag.dup{background:#3a2226;color:var(--danger);}
   .progress-wrap{background:var(--panel2);border-radius:6px;height:8px;overflow:hidden;}
@@ -1792,15 +1806,35 @@ function renderFatherAssetBlock(fa, dept){
   head.append(info, btnGroup);
   head.onclick = ()=>{
     if(!state.openAssets) state.openAssets = new Set();
-    if(state.openAssets.has(fa.id)) state.openAssets.delete(fa.id);
-    else state.openAssets.add(fa.id);
-    render();
+    const detailDiv = block.querySelector('.asset-detail-content');
+    if(state.openAssets.has(fa.id)){
+      // Collapse: remove detail div
+      state.openAssets.delete(fa.id);
+      if(detailDiv) detailDiv.remove();
+      const arrow = info.querySelector('span');
+      if(arrow) arrow.textContent = '▶';
+    } else {
+      // Expand: build and append detail div
+      state.openAssets.add(fa.id);
+      const arrow = info.querySelector('span');
+      if(arrow) arrow.textContent = '▼';
+      const detail = buildAssetDetail(fa, dept);
+      detail.className = 'asset-detail-content';
+      block.appendChild(detail);
+    }
   };
   block.appendChild(head);
 
   if(!isOpen) return block; // collapsed — header only
 
   // ---- Expanded: full detail + child assets ----
+  const detail = buildAssetDetail(fa, dept);
+  detail.className = 'asset-detail-content';
+  block.appendChild(detail);
+  return block;
+}
+
+function buildAssetDetail(fa, dept){
   const detail = document.createElement('div');
   detail.style.cssText='margin-top:10px;padding:10px;background:var(--panel2);border-radius:6px;';
 
@@ -1890,8 +1924,7 @@ function renderFatherAssetBlock(fa, dept){
   row1.append(cName, cQty, cBtn);
   detail.appendChild(row1);
 
-  block.appendChild(detail);
-  return block;
+  return detail;
 }
 
 function renderChildAsset(c){
