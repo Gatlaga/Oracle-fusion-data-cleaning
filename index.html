@@ -2427,8 +2427,12 @@ function renderExport(app){
     const myFather = state.fatherAssets.filter(a=>a.department===targetDept);
     const myChildren = state.childAssets.filter(c=>c.department===targetDept);
     const myChildIds = myChildren.map(c=>c.id);
+    const myFatherIds = myFather.map(a=>a.id);
     const myItems = state.items.filter(it=>it.department===targetDept);
-    const myLinks = state.links.filter(l=>myChildIds.includes(l.child_asset_id));
+    const myLinks = state.links.filter(l=>
+      (l.child_asset_id && myChildIds.includes(l.child_asset_id)) ||
+      (l.father_asset_id && myFatherIds.includes(l.father_asset_id))
+    );
 
     const myExp = card(`📥 ${targetDept||''} — Миний дата татах`, 'Өөрийн алба нэгжийн Asset, Child asset, Item жагсаалтыг татна.');
 
@@ -2470,17 +2474,23 @@ function renderExport(app){
     const b4 = document.createElement('button'); b4.className='btn secondary';
     b4.textContent=`Item↔Asset холболт (${myLinks.length}) татах`;
     b4.onclick=()=>{
-      const rows=[['Asset Type','Asset Name','Asset Code','Father Asset','Item Code','Item Name','UOM','Тоо ш']];
+      const rows=[['Link Level','Father Asset Code','Father Asset','Child Asset','Item Code','Item Name','Category','Min','Max','UOM','Тоо ш','Verified']];
       myLinks.forEach(l=>{
         const it=state.items.find(x=>x.id===l.item_id);
         if(!it) return;
+        const cat = l.corr_category||it.category||'';
+        const mn  = l.corr_min!=null&&l.corr_min!==''?l.corr_min:(it.min||'');
+        const mx  = l.corr_max!=null&&l.corr_max!==''?l.corr_max:(it.max||'');
+        const uom = l.corr_uom||it.uom||'';
         if(l.father_asset_id){
           const fa=state.fatherAssets.find(x=>x.id===l.father_asset_id);
-          rows.push(['Father',fa?fa.name:'',fa?fa.code:'','',it.code,it.name,it.uom||'',l.qty||'']);
+          if(!fa) return;
+          rows.push(['Father',fa.code||'',fa.name,'',it.code,it.name,cat,mn,mx,uom,l.qty||'',l.verified?'Yes':'No']);
         } else if(l.child_asset_id){
           const c=state.childAssets.find(x=>x.id===l.child_asset_id);
-          const fa=c?state.fatherAssets.find(x=>x.id===c.father_id):null;
-          rows.push(['Child',c?c.name:'','',fa?fa.name:'',it.code,it.name,it.uom||'',l.qty||'']);
+          if(!c) return;
+          const fa=state.fatherAssets.find(x=>x.id===c.father_id);
+          rows.push(['Child',fa?fa.code||'':'',fa?fa.name:'',c.name,it.code,it.name,cat,mn,mx,uom,l.qty||'',l.verified?'Yes':'No']);
         }
       });
       downloadCsv(rows,`${targetDept||'my'}-item-links.csv`);
@@ -2543,17 +2553,23 @@ function renderExport(app){
     // All Links
     const bAllLk = document.createElement('button'); bAllLk.className='btn secondary'; bAllLk.textContent=`Бүх холболт (${state.links.length})`;
     bAllLk.onclick=()=>{
-      const rows=[['Department','Asset Type','Asset Name','Asset Code','Father Asset','Item Code','Item Name','UOM','Link Qty','Verified']];
+      const rows=[['Department','Link Level','Father Asset Code','Father Asset','Child Asset','Item Code','Item Name','Category','Min','Max','UOM','Link Qty','Verified']];
       state.links.forEach(l=>{
         const it=state.items.find(x=>x.id===l.item_id);
         if(!it) return;
+        const cat = l.corr_category||it.category||'';
+        const mn  = l.corr_min!=null&&l.corr_min!==''?l.corr_min:(it.min||'');
+        const mx  = l.corr_max!=null&&l.corr_max!==''?l.corr_max:(it.max||'');
+        const uom = l.corr_uom||it.uom||'';
         if(l.father_asset_id){
           const fa=state.fatherAssets.find(x=>x.id===l.father_asset_id);
-          rows.push([fa?fa.department||'':'','Father',fa?fa.name:'',fa?fa.code:'','',it.code,it.name,it.uom||'',l.qty||'',l.verified?'Yes':'No']);
+          if(!fa) return;
+          rows.push([fa.department||'','Father',fa.code||'',fa.name,'',it.code,it.name,cat,mn,mx,uom,l.qty||'',l.verified?'Yes':'No']);
         } else if(l.child_asset_id){
           const c=state.childAssets.find(x=>x.id===l.child_asset_id);
-          const fa=c?state.fatherAssets.find(x=>x.id===c.father_id):null;
-          rows.push([c?c.department||'':'','Child',c?c.name:'','',fa?fa.name:'',it.code,it.name,it.uom||'',l.qty||'',l.verified?'Yes':'No']);
+          if(!c) return;
+          const fa=state.fatherAssets.find(x=>x.id===c.father_id);
+          rows.push([c.department||(fa?fa.department||'':''),'Child',fa?fa.code||'':'',fa?fa.name:'',c.name,it.code,it.name,cat,mn,mx,uom,l.qty||'',l.verified?'Yes':'No']);
         }
       });
       downloadCsv(rows,'ALL-item-links.csv');
@@ -2562,32 +2578,45 @@ function renderExport(app){
 
     allExpCard.appendChild(allBtnRow);
     app.appendChild(allExpCard);
-    const c1 = card('Бүх Asset жагсаалт (нийт)', 'Father + Child asset бүгд.');
+    const c1 = card('Бүх Asset жагсаалт (нийт)', 'Father + Child asset бүгд, баталгаажуулалт болон тайлбарын хамт.');
     const b1g = document.createElement('button'); b1g.className='btn'; b1g.textContent='CSV татах';
     b1g.onclick = ()=>{
-      const rows = [['Father Code','Father Name','Department','Child Asset','Child Qty']];
+      const rows = [['Father Code','Father Name','Department','Asset Group','Asset Category','Process Area','Verified','Father Note','Child Asset','Child Qty','Child Criticality','Child Location']];
       state.fatherAssets.forEach(fa=>{
         const children = state.childAssets.filter(c=>c.father_id===fa.id);
-        if(children.length===0){ rows.push([fa.code, fa.name, fa.department||'', '', '']); }
-        children.forEach(c=> rows.push([fa.code, fa.name, fa.department||'', c.name, c.qty||'']));
+        const base = [fa.code||'', fa.name, fa.department||'', fa.asset_group||'', fa.asset_category||'', fa.process_area||'', (fa.verified===true||fa.verified==='true')?'Yes':'No', fa.note||''];
+        if(children.length===0){ rows.push([...base, '', '', '', '']); }
+        children.forEach(c=> rows.push([...base, c.name, c.qty||'', c.criticality||'', c.location||'']));
       });
       downloadCsv(rows, 'all-asset-structure.csv');
     };
     c1.appendChild(b1g); app.appendChild(c1);
 
-  const c2 = card('Item холболт экспорт', 'Child asset тус бүрт хамаарах item, тоо ширхэг, баталгаажсан категори/min/max/UOM. Зөвхөн "Идэвхтэй" төлөвтэй item орно (Устгах/Хасах санал орохгүй).');
+  const c2 = card('Item холболт экспорт', 'Father болон Child asset тус бүрт хамаарах item, тоо ширхэг, баталгаажсан категори/min/max/UOM. Зөвхөн "Идэвхтэй" төлөвтэй item орно (Устгах/Хасах санал орохгүй).');
   const b2 = document.createElement('button'); b2.className='btn'; b2.textContent='CSV татах';
   b2.onclick = ()=>{
-    const rows = [['Department','Father Asset','Child Asset','Item Code','Item Name','Category','Min','Max','UOM','Link Qty','Verified']];
+    const rows = [['Department','Link Level','Father Asset Code','Father Asset','Child Asset','Item Code','Item Name','Category','Min','Max','UOM','Link Qty','Verified']];
     state.links.forEach(l=>{
-      const c = state.childAssets.find(x=>x.id===l.child_asset_id);
-      const fa = c ? state.fatherAssets.find(x=>x.id===c.father_id) : null;
       const it = state.items.find(x=>x.id===l.item_id);
-      if(!c||!it) return;
+      if(!it) return;
       if(it.status==='removed' || it.status==='remove_pending') return;
-      rows.push([fa?fa.department||'':'', fa?fa.name:'', c.name, it.code, it.name,
-        l.corr_category||it.category, l.corr_min||it.min, l.corr_max||it.max, l.corr_uom||it.uom,
-        l.qty||'', l.verified?'Yes':'No']);
+      const cat = l.corr_category||it.category||'';
+      const mn  = l.corr_min!=null&&l.corr_min!==''?l.corr_min:(it.min||'');
+      const mx  = l.corr_max!=null&&l.corr_max!==''?l.corr_max:(it.max||'');
+      const uom = l.corr_uom||it.uom||'';
+      const ver = l.verified?'Yes':'No';
+      if(l.father_asset_id){
+        const fa = state.fatherAssets.find(x=>x.id===l.father_asset_id);
+        if(!fa) return;
+        rows.push([fa.department||'', 'Father', fa.code||'', fa.name, '',
+          it.code, it.name, cat, mn, mx, uom, l.qty||'', ver]);
+      } else if(l.child_asset_id){
+        const c = state.childAssets.find(x=>x.id===l.child_asset_id);
+        if(!c) return;
+        const fa = state.fatherAssets.find(x=>x.id===c.father_id);
+        rows.push([c.department||(fa?fa.department||'':''), 'Child', fa?fa.code||'':'', fa?fa.name:'', c.name,
+          it.code, it.name, cat, mn, mx, uom, l.qty||'', ver]);
+      }
     });
     downloadCsv(rows, 'item-links.csv');
   };
@@ -2597,10 +2626,11 @@ function renderExport(app){
   const c2b = card('Item Master эцсийн жагсаалт', 'Бүх item, тэдгээрийн эцсийн төлөв (Идэвхтэй/Устгах/Шалгагдаагүй) — Oracle-д ачаалахын өмнө "Шалгагдаагүй" мөр байхгүй эсэхийг шалгана уу.');
   const b2b = document.createElement('button'); b2b.className='btn'; b2b.textContent='CSV татах';
   b2b.onclick = ()=>{
-    const rows = [['Item Code','Item Name','Category','Min','Max','UOM','Department','Status','Note']];
+    const rows = [['Item Code','Item Name','Revised Name','Spec','Equipment','Category','Min','Max','UOM','Criticality','Department','Status','UNSPSC Segment','UNSPSC Family','UNSPSC Class','UNSPSC Commodity','Note']];
     const statusLabel = {active:'Идэвхтэй', removed:'Устгасан', remove_pending:'Хасах санал', needs_review:'Шалгагдаагүй'};
     state.items.forEach(it=>{
-      rows.push([it.code, it.name, it.category, it.min, it.max, it.uom, it.department||'', statusLabel[it.status]||it.status, it.note||'']);
+      const u = getUnspsc(it.code)||{};
+      rows.push([it.code, it.name, it.revised_name||'', it.spec||'', it.equipment||'', it.category||'', it.min||'', it.max||'', it.uom||'', it.criticality||'', it.department||'', statusLabel[it.status]||it.status, u.segment||'', u.family||'', u.cls||'', u.commodity||'', it.note||'']);
     });
     downloadCsv(rows, 'item-master-final.csv');
   };
@@ -2608,13 +2638,17 @@ function renderExport(app){
   app.appendChild(c2b);
 
   // ---- Oracle FBDI ready exports ----
-  const cFA = card('⬇ Oracle FBDI — Asset (FA_MASS_ADDITIONS)', 'Child asset тус бүрийг Oracle FA Mass Additions баганаар. Гана эцэст нь санхүүгийн дутуу утгыг нөхөж, Oracle FBDI .xlsm-д хуулна.');
+  const cFA = card('⬇ Oracle FBDI — Asset (FA_MASS_ADDITIONS)', 'Child asset тус бүрийг Oracle FA Mass Additions баганаар. ASSET_NUMBER хоосон = кодлогдоогүй (дараа нэгдсэн байдлаар олгоно). Санхүүгийн талбарыг ER-ийн санхүүгээс авч нөхнө.');
   const bFA = document.createElement('button'); bFA.className='btn'; bFA.textContent='Oracle Asset CSV татах';
   bFA.onclick = ()=>{
-    const rows = [['ASSET_NUMBER','DESCRIPTION','ASSET_CATEGORY','DATE_PLACED_IN_SERVICE','ASSET_COST','ASSET_TYPE','DEPRN_METHOD','LIFE_IN_MONTHS','LOCATION','UNITS','CRITICALITY','MANUFACTURER','MODEL','SERIAL_NUMBER','DEPARTMENT','PARENT_ASSET']];
+    const rows = [['ASSET_NUMBER','CODE_STATUS','DESCRIPTION','ASSET_CATEGORY','DATE_PLACED_IN_SERVICE','ASSET_COST','ASSET_TYPE','DEPRN_METHOD','LIFE_IN_MONTHS','LOCATION','UNITS','CRITICALITY','MANUFACTURER','MODEL','SERIAL_NUMBER','DEPARTMENT','PARENT_ASSET_CODE','PARENT_ASSET_NAME']];
     state.childAssets.forEach(c=>{
       const fa = state.fatherAssets.find(x=>x.id===c.father_id);
-      rows.push(['', c.name, c.category||'', c.date_in_service||'', c.asset_cost||'', c.asset_type||'', c.deprn_method||'', c.life_months||'', c.location||'', c.qty||'1', c.criticality||'', c.manufacturer||'', c.model||'', c.serial||'', c.department||'', fa?fa.name:'']);
+      rows.push(['', 'Кодлогдоогүй', c.name, c.category||'', c.date_in_service||'', c.asset_cost||'', c.asset_type||'', c.deprn_method||'', c.life_months||'', c.location||'', c.qty||'1', c.criticality||'', c.manufacturer||'', c.model||'', c.serial||'', c.department||'', fa?fa.code||'':'', fa?fa.name:'']);
+    });
+    // Кодгүй шинэ father asset-уудыг мөн оруулна
+    state.fatherAssets.filter(a=>!a.code||!a.code.trim()).forEach(a=>{
+      rows.push(['', 'Кодлогдоогүй (шинэ Father)', a.name, a.asset_category||'', '', '', '', '', '', a.process_area||'', '1', '', '', '', '', a.department||'', '', '']);
     });
     downloadCsv(rows, 'oracle-fa-mass-additions.csv');
   };
