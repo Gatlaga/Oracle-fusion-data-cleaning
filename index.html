@@ -18,7 +18,7 @@
     --danger:#c9414d;
   }
   *{box-sizing:border-box;}
-  body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:14px;transition:background .2s,color .2s;}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:14px;transition:background .2s,color .2s;overflow-x:hidden;}
   .theme-toggle{background:var(--panel2);border:1px solid var(--line);color:var(--text);width:34px;height:34px;border-radius:8px;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;}
   .topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 22px;background:var(--panel);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:10;flex-wrap:wrap;gap:10px;}
   .brand{display:flex;align-items:center;gap:10px;}
@@ -30,7 +30,9 @@
   nav button.active{background:var(--panel2);color:var(--text);border-color:var(--line);}
   nav button.logout-btn{border-color:var(--line);color:var(--sub);background:var(--panel);}
   nav button.logout-btn:hover{border-color:var(--danger);color:var(--danger);}
-  main{max-width:1180px;margin:0 auto;padding:22px;}
+  main{max-width:100%;margin:0;padding:12px 16px;box-sizing:border-box;}
+  @media(min-width:1400px){ main{padding:16px 32px;} }
+  @media(max-width:768px){ main{padding:10px 12px;} }
   .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px 20px;margin-bottom:16px;}
   .card h2{font-size:14px;margin:0 0 4px;font-weight:600;}
   .card .desc{color:var(--sub);font-size:12.5px;margin-bottom:14px;}
@@ -486,12 +488,37 @@ function renderAdmin(app){
   app.appendChild(impRow);
   const dash = card('📊 Алба нэгж бүрийн явц — Dashboard', '');
 
-  // Global progress bars
+  // Overall summary banner
   const totalFather = state.fatherAssets.length;
   const claimedFather = state.fatherAssets.filter(a=>a.department).length;
+  const totalVerifiedAll = state.fatherAssets.filter(a=>a.verified===true||a.verified==='true').length;
+  const totalChildAll = state.childAssets.length;
+  const totalItemAll = state.items.length;
   const activeItemsN = state.items.filter(it=>it.status==='active').length;
+  const itemsWithDept = state.items.filter(it=>it.department).length;
+  const removeItems = state.items.filter(it=>it.status==='removed'||it.status==='remove_pending').length;
+  const totalLinksAll = state.links.length;
+  
+  const claimedPct = totalFather>0 ? Math.round(claimedFather/totalFather*100) : 0;
+  const verifiedPctAll = claimedFather>0 ? Math.round(totalVerifiedAll/claimedFather*100) : 0;
+  const activePctAll = totalItemAll>0 ? Math.round(activeItemsN/totalItemAll*100) : 0;
+  const reviewedPct = totalItemAll>0 ? Math.round((activeItemsN+removeItems)/totalItemAll*100) : 0;
+
+  const summaryBanner = document.createElement('div');
+  summaryBanner.style.cssText='display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-bottom:16px;padding:14px;background:var(--panel2);border-radius:10px;border:1px solid var(--line);';
+  summaryBanner.innerHTML=`
+    <div style="text-align:center"><div style="font-size:22px;font-weight:800;color:var(--accent)">${totalFather}</div><div style="font-size:10px;color:var(--sub)">Нийт Father Asset</div></div>
+    <div style="text-align:center"><div style="font-size:22px;font-weight:800;color:${claimedPct>=80?'var(--accent2)':'#f0a500'}">${claimedPct}%</div><div style="font-size:10px;color:var(--sub)">Хуваарилагдсан (${claimedFather}/${totalFather})</div></div>
+    <div style="text-align:center"><div style="font-size:22px;font-weight:800;color:${verifiedPctAll>=80?'var(--accent2)':'#f0a500'}">${verifiedPctAll}%</div><div style="font-size:10px;color:var(--sub)">Asset шалгасан (${totalVerifiedAll}/${claimedFather})</div></div>
+    <div style="text-align:center"><div style="font-size:22px;font-weight:800;color:var(--accent2)">${totalChildAll}</div><div style="font-size:10px;color:var(--sub)">Нийт Child Asset</div></div>
+    <div style="text-align:center"><div style="font-size:22px;font-weight:800;color:#f0a500">${totalItemAll}</div><div style="font-size:10px;color:var(--sub)">Нийт Item</div></div>
+    <div style="text-align:center"><div style="font-size:22px;font-weight:800;color:${reviewedPct>=80?'var(--accent2)':'var(--danger)'}">${reviewedPct}%</div><div style="font-size:10px;color:var(--sub)">Item шалгасан (${activeItemsN+removeItems}/${totalItemAll})</div></div>
+    <div style="text-align:center"><div style="font-size:22px;font-weight:800;color:var(--accent)">${totalLinksAll}</div><div style="font-size:10px;color:var(--sub)">Нийт холболт</div></div>
+  `;
+  dash.appendChild(summaryBanner);
+
   dash.appendChild(progressRow(`Father asset хуваарилагдсан (${claimedFather}/${totalFather})`, claimedFather, totalFather||1));
-  dash.appendChild(progressRow(`Item баталгаажсан (${activeItemsN}/${state.items.length})`, activeItemsN, state.items.length||1));
+  dash.appendChild(progressRow(`Item баталгаажсан (${activeItemsN}/${totalItemAll})`, activeItemsN, totalItemAll||1));
 
   // Per-department big cards
   const dGrid = document.createElement('div');
@@ -610,15 +637,15 @@ function renderAdmin(app){
       <td style="font-weight:500;padding:8px">${escapeHtml(d.name)}</td>
       <td style="text-align:center;padding:8px"><strong>${myFa.length}</strong></td>
       <td style="text-align:center;padding:8px">
-        <div style="background:${verifiedPct>=80?'#1a3a2e':verifiedPct>=50?'#2a3a1a':'#3a2226'};padding:4px 8px;border-radius:4px;font-size:11px;font-weight:700;color:${verifiedPct>=80?'var(--accent2)':verifiedPct>=50?'#f0a500':'var(--danger)'}">
-          ✅ ${verifiedFa}/${myFa.length} (${verifiedPct}%)
+        <div style="background:${myFa.length===0?'var(--panel2)':verifiedPct>=80?'#1a3a2e':verifiedPct>=50?'#2a3a1a':'#3a2226'};padding:4px 8px;border-radius:4px;font-size:11px;font-weight:700;color:${myFa.length===0?'var(--sub)':verifiedPct>=80?'var(--accent2)':verifiedPct>=50?'#f0a500':'var(--danger)'}">
+          ${myFa.length===0?'—':`✅ ${verifiedFa}/${myFa.length} (${verifiedPct}%)`}
         </div>
       </td>
       <td style="text-align:center;padding:8px"><strong style="color:var(--accent2)">${myCa.length}</strong></td>
       <td style="text-align:center;padding:8px"><strong>${myIt.length}</strong></td>
       <td style="text-align:center;padding:8px">
-        <div style="background:${activePct>=80?'#1a3a2e':activePct>=50?'#2a3a1a':'#3a2226'};padding:4px 8px;border-radius:4px;font-size:11px;font-weight:700;color:${activePct>=80?'var(--accent2)':activePct>=50?'#f0a500':'var(--danger)'}">
-          ${activeIt}/${myIt.length} (${activePct}%)
+        <div style="background:${myIt.length===0?'var(--panel2)':activePct>=80?'#1a3a2e':activePct>=50?'#2a3a1a':'#3a2226'};padding:4px 8px;border-radius:4px;font-size:11px;font-weight:700;color:${myIt.length===0?'var(--sub)':activePct>=80?'var(--accent2)':activePct>=50?'#f0a500':'var(--danger)'}">
+          ${myIt.length===0?'—':`${activeIt}/${myIt.length} (${activePct}%)`}
         </div>
       </td>
       <td style="text-align:center;padding:8px">${removeIt>0?`<span style="color:var(--danger);font-weight:700">${removeIt}</span>`:'—'}</td>
@@ -631,6 +658,47 @@ function renderAdmin(app){
     `;
     detailTable.appendChild(tr);
   });
+
+  // ===== SUMMARY ROW =====
+  const totalFa = state.fatherAssets.filter(a=>a.department).length;
+  const totalFaAll = state.fatherAssets.length;
+  const totalVerified = state.fatherAssets.filter(a=>(a.verified===true||a.verified==='true')&&a.department).length;
+  const totalCa = state.childAssets.length;
+  const totalIt = state.items.filter(it=>it.department).length;
+  const totalActive = state.items.filter(it=>it.status==='active').length;
+  const totalRemove = state.items.filter(it=>it.status==='removed'||it.status==='remove_pending').length;
+  const totalLinks = state.links.length;
+  const avgVerPct = totalFa>0?Math.round(totalVerified/totalFa*100):0;
+  const avgActPct = totalIt>0?Math.round(totalActive/totalIt*100):0;
+  const allSteps = state.departments.map(d=>{const s=deptProgressStatus(d.name);return [s.step1,s.step2,s.step3,s.step4,s.step5].filter(Boolean).length;});
+  const avgDonePct = allSteps.length>0?Math.round(allSteps.reduce((a,b)=>a+b,0)/allSteps.length/5*100):0;
+
+  const sumTr = document.createElement('tr');
+  sumTr.style.cssText='border-top:2px solid var(--accent);background:var(--panel2);font-weight:700;';
+  sumTr.innerHTML=`
+    <td style="padding:10px;font-size:13px">📊 НИЙТ</td>
+    <td style="text-align:center;padding:10px;font-size:13px">${totalFa}/${totalFaAll}</td>
+    <td style="text-align:center;padding:10px">
+      <div style="background:#1a3a2e;padding:4px 8px;border-radius:4px;font-size:12px;color:var(--accent2)">
+        ${totalVerified}/${totalFa} (${avgVerPct}%)
+      </div>
+    </td>
+    <td style="text-align:center;padding:10px;font-size:13px;color:var(--accent2)">${totalCa}</td>
+    <td style="text-align:center;padding:10px;font-size:13px">${totalIt}</td>
+    <td style="text-align:center;padding:10px">
+      <div style="background:${avgActPct>=80?'#1a3a2e':'#2a3a1a'};padding:4px 8px;border-radius:4px;font-size:12px;color:${avgActPct>=80?'var(--accent2)':'#f0a500'}">
+        ${totalActive}/${totalIt} (${avgActPct}%)
+      </div>
+    </td>
+    <td style="text-align:center;padding:10px;color:var(--danger)">${totalRemove||'—'}</td>
+    <td style="text-align:center;padding:10px;color:var(--accent)">${totalLinks}</td>
+    <td style="text-align:center;padding:10px">
+      <div style="background:${avgDonePct>=80?'#1a3a2e':'#2a3a1a'};padding:4px 8px;border-radius:4px;font-size:12px;color:${avgDonePct>=80?'var(--accent2)':'#f0a500'}">
+        ${avgDonePct}%
+      </div>
+    </td>
+  `;
+  detailTable.appendChild(sumTr);
 
   detailCard.appendChild(detailTable);
   app.appendChild(detailCard);
@@ -2368,8 +2436,8 @@ function renderExport(app){
     const b1 = document.createElement('button'); b1.className='btn'; b1.style.marginRight='8px';
     b1.textContent=`Father Asset (${myFather.length}) татах`;
     b1.onclick=()=>{
-      const rows=[['Asset Number','Asset Description','Department']];
-      myFather.forEach(a=>rows.push([a.code,a.name,a.department||'']));
+      const rows=[['Asset Number','Asset Description','Department','Asset Group','Asset Group Desc','Asset Category','Process Area','Verified','Note']];
+      myFather.forEach(a=>rows.push([a.code,a.name,a.department||'',a.asset_group||'',a.asset_group_desc||'',a.asset_category||'',a.process_area||'',a.verified?'Yes':'No',a.note||'']));
       downloadCsv(rows,`${targetDept||'my'}-father-assets.csv`);
     };
 
@@ -2390,10 +2458,10 @@ function renderExport(app){
     b3.textContent=`Item/Spare parts (${myItems.length}) татах`;
     b3.onclick=()=>{
       const statusLabel={active:'Идэвхтэй',removed:'Устгасан',remove_pending:'Хасах санал',needs_review:'Шалгагдаагүй'};
-      const rows=[['Item Code','Item Name','Spec (Үзүүлэлт)','Equipment (Тоноглол)','Min','Max','UOM','Criticality','Status','UNSPSC Segment','UNSPSC Family','UNSPSC Class','UNSPSC Commodity','Note']];
+      const rows=[['Item Code','Item Name','Revised Name','Spec (Үзүүлэлт)','Equipment (Тоноглол)','Department','Min','Max','UOM','Criticality','Status','Transaction Type','Org Code','Item Status','Item Type','Primary UOM','Item Class','Source System','UNSPSC Segment','UNSPSC Family','UNSPSC Class','UNSPSC Commodity','Note']];
       myItems.forEach(it=>{
         const u=getUnspsc(it.code)||{};
-        rows.push([it.code,it.name,it.spec||'',it.equipment||'',it.min||'',it.max||'',it.uom||'',it.criticality||'',statusLabel[it.status]||it.status,u.segment||'',u.family||'',u.cls||'',u.commodity||'',it.note||'']);
+        rows.push([it.code,it.name,it.revised_name||'',it.spec||'',it.equipment||'',it.department||'',it.min||'',it.max||'',it.uom||'',it.criticality||'',statusLabel[it.status]||it.status,it.transaction_type||'',it.org_code||'',it.item_status||'',it.item_type||'',it.primary_uom||'',it.item_class||'',it.source_system||'',u.segment||'',u.family||'',u.cls||'',u.commodity||'',it.note||'']);
       });
       downloadCsv(rows,`${targetDept||'my'}-items.csv`);
     };
@@ -2435,6 +2503,65 @@ function renderExport(app){
       sel.appendChild(s); app.appendChild(sel);
     }
     // Global exports (admin only)
+    const allExpCard = card('📦 НИйТ АЛБА НЭГЖИЙН НЭГДСЭН ТАЙЛАН', 'Бүх алба нэгжийн Father Asset, Child Asset, Item, Холболтыг нэг файлд нэгтгэж татна.');
+    const allBtnRow = document.createElement('div'); allBtnRow.style.cssText='display:flex;flex-wrap:wrap;gap:8px;';
+
+    // All Father Assets
+    const bAllFa = document.createElement('button'); bAllFa.className='btn'; bAllFa.textContent=`Бүх Father Asset (${state.fatherAssets.length})`;
+    bAllFa.onclick=()=>{
+      const rows=[['Department','Asset Number','Asset Description','Asset Group','Asset Group Desc','Asset Category','Process Area','Verified','Note']];
+      state.fatherAssets.forEach(a=>rows.push([a.department||'Эзэмшигчгүй',a.code,a.name,a.asset_group||'',a.asset_group_desc||'',a.asset_category||'',a.process_area||'',a.verified?'Yes':'No',a.note||'']));
+      downloadCsv(rows,'ALL-father-assets.csv');
+    };
+    allBtnRow.appendChild(bAllFa);
+
+    // All Child Assets
+    const bAllCa = document.createElement('button'); bAllCa.className='btn'; bAllCa.textContent=`Бүх Child Asset (${state.childAssets.length})`;
+    bAllCa.onclick=()=>{
+      const rows=[['Department','Father Asset Code','Father Asset Name','Child Asset','Тоо','Criticality','Category','Date In Service','Asset Cost','Asset Type','Deprn Method','Life Months','Location','Manufacturer','Model','Serial']];
+      state.childAssets.forEach(c=>{
+        const fa=state.fatherAssets.find(x=>x.id===c.father_id);
+        rows.push([c.department||'',fa?fa.code:'',fa?fa.name:'',c.name,c.qty||'',c.criticality||'',c.category||'',c.date_in_service||'',c.asset_cost||'',c.asset_type||'',c.deprn_method||'',c.life_months||'',c.location||'',c.manufacturer||'',c.model||'',c.serial||'']);
+      });
+      downloadCsv(rows,'ALL-child-assets.csv');
+    };
+    allBtnRow.appendChild(bAllCa);
+
+    // All Items
+    const bAllIt = document.createElement('button'); bAllIt.className='btn secondary'; bAllIt.textContent=`Бүх Item (${state.items.length})`;
+    bAllIt.onclick=()=>{
+      const statusLabel={active:'Идэвхтэй',removed:'Устгасан',remove_pending:'Хасах санал',needs_review:'Шалгагдаагүй'};
+      const rows=[['Department','Item Code','Item Name','Revised Name','Spec','Equipment','Min','Max','UOM','Criticality','Status','Transaction Type','Org Code','Item Status','Item Type','Primary UOM','Item Class','Source System','UNSPSC Segment','UNSPSC Family','UNSPSC Class','UNSPSC Commodity','Note']];
+      state.items.forEach(it=>{
+        const u=getUnspsc(it.code)||{};
+        rows.push([it.department||'Эзэмшигчгүй',it.code,it.name,it.revised_name||'',it.spec||'',it.equipment||'',it.min||'',it.max||'',it.uom||'',it.criticality||'',statusLabel[it.status]||it.status,it.transaction_type||'',it.org_code||'',it.item_status||'',it.item_type||'',it.primary_uom||'',it.item_class||'',it.source_system||'',u.segment||'',u.family||'',u.cls||'',u.commodity||'',it.note||'']);
+      });
+      downloadCsv(rows,'ALL-items.csv');
+    };
+    allBtnRow.appendChild(bAllIt);
+
+    // All Links
+    const bAllLk = document.createElement('button'); bAllLk.className='btn secondary'; bAllLk.textContent=`Бүх холболт (${state.links.length})`;
+    bAllLk.onclick=()=>{
+      const rows=[['Department','Asset Type','Asset Name','Asset Code','Father Asset','Item Code','Item Name','UOM','Link Qty','Verified']];
+      state.links.forEach(l=>{
+        const it=state.items.find(x=>x.id===l.item_id);
+        if(!it) return;
+        if(l.father_asset_id){
+          const fa=state.fatherAssets.find(x=>x.id===l.father_asset_id);
+          rows.push([fa?fa.department||'':'','Father',fa?fa.name:'',fa?fa.code:'','',it.code,it.name,it.uom||'',l.qty||'',l.verified?'Yes':'No']);
+        } else if(l.child_asset_id){
+          const c=state.childAssets.find(x=>x.id===l.child_asset_id);
+          const fa=c?state.fatherAssets.find(x=>x.id===c.father_id):null;
+          rows.push([c?c.department||'':'','Child',c?c.name:'','',fa?fa.name:'',it.code,it.name,it.uom||'',l.qty||'',l.verified?'Yes':'No']);
+        }
+      });
+      downloadCsv(rows,'ALL-item-links.csv');
+    };
+    allBtnRow.appendChild(bAllLk);
+
+    allExpCard.appendChild(allBtnRow);
+    app.appendChild(allExpCard);
     const c1 = card('Бүх Asset жагсаалт (нийт)', 'Father + Child asset бүгд.');
     const b1g = document.createElement('button'); b1g.className='btn'; b1g.textContent='CSV татах';
     b1g.onclick = ()=>{
